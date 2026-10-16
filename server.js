@@ -120,6 +120,7 @@ async function geminiRequest(model, body, fixedKey = null) {
       }
       if (!fixedKey) rotateGeminiKeyAfter(apiKey);
     }
+    if (fixedKey) throw lastError || new Error('Gemini API tidak merespons.');
     await sleep(500);
   }
 }

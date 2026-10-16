@@ -110,7 +110,11 @@ async function transcribeCurrentFile() {
   setStatus('Mengambil suara dan membuat teks otomatis...'); setBusy(true);
   try {
     const response = await fetch('/api/transcribe', { method: 'POST', body: form, signal: controller.signal });
-    const data = await response.json(); if (!response.ok) throw Error(data.error);
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json')
+      ? await response.json()
+      : { error: response.ok ? 'Server mengembalikan respons yang tidak dikenali.' : `Server sedang memulai ulang atau sibuk (HTTP ${response.status}). Coba lagi.` };
+    if (!response.ok) throw Error(data.error);
     if (state.file !== selectedFile || transcribeController !== controller) return;
     state.segments = data.segments || [];
     caption.value = state.segments[0]?.text || '';
