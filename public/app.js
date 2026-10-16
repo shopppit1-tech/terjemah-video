@@ -17,8 +17,9 @@ function setStatus(text, error = false) { status.textContent = text; status.clas
 function setBusy(active, text = 'Sedang membuat teks otomatis...') { const overlay = $('#busyOverlay'); const button = $('#transcribeBtn'); if (overlay) overlay.classList.toggle('show', active); if (button) { button.disabled = active; button.style.opacity = active ? '.65' : '1'; button.textContent = active ? '⏳ Sedang bekerja...' : '▣ Buat Teks Otomatis'; } const title = $('#busyTitle'); if (title) title.textContent = text; }
 function syncCaption() {
   const hasCaption = Boolean(caption.value.trim());
-  preview.textContent = hasCaption ? caption.value : 'Contoh subtitle';
-  preview.style.opacity = hasCaption ? '1' : '.62';
+  preview.textContent = hasCaption ? caption.value : '';
+  preview.style.display = hasCaption ? 'block' : 'none';
+  preview.style.opacity = '1';
   const count = $('#charCount');
   if (count) count.textContent = `${caption.value.length}/120`;
 }
