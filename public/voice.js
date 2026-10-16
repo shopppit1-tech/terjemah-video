@@ -1,3 +1,7 @@
+import { authenticatedFetch, requireLogin } from './firebase-client.js';
+
+await requireLogin();
+
 const $ = (selector) => document.querySelector(selector);
 const textInput = $('#textInput');
 const voiceSelect = $('#voiceSelect');
@@ -46,7 +50,7 @@ generateBtn.onclick = async () => {
   generateBtn.textContent = 'Membuat suara...';
   setStatus('Gemini sedang membuat audio...');
   try {
-    const response = await fetch('/api/generate-voice', {
+    const response = await authenticatedFetch('/api/generate-voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: voiceSelect.value, style: styleInput.value })

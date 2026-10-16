@@ -1,3 +1,7 @@
+import { authenticatedFetch, requireLogin } from './firebase-client.js';
+
+await requireLogin();
+
 const state = { file: null, segments: [], color: '#ef4444', template: 'pill', fontSize: 28, position: 'bottom', fontFamily: 'DejaVu Sans', outputFormat: 'source' };
 const previewFontStacks = {
   'DejaVu Sans': 'system-ui, -apple-system, "Segoe UI", sans-serif',
@@ -12,6 +16,29 @@ const preview = $('#subtitlePreview');
 const status = $('#status');
 const caption = $('#caption');
 let transcribeController = null;
+let currentHistoryId = null;
+let historySaveTimer = null;
+
+function scheduleHistorySave() {
+  if (!currentHistoryId) return;
+  clearTimeout(historySaveTimer);
+  historySaveTimer = setTimeout(async () => {
+    try {
+      const response = await authenticatedFetch(`/api/history/${encodeURIComponent(currentHistoryId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: state.segments.map((segment) => segment.text).join('\n'),
+          segments: state.segments,
+          settings: { color: state.color, template: state.template, fontSize: state.fontSize, position: state.position, fontFamily: state.fontFamily, outputFormat: state.outputFormat }
+        })
+      });
+      if (!response.ok) throw new Error('Riwayat belum tersimpan.');
+    } catch {
+      setStatus('Perubahan belum tersimpan di riwayat. Periksa koneksi, lalu coba lagi.', true);
+    }
+  }, 900);
+}
 
 function fmt(s) { return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
 function setStatus(text, error = false) { status.textContent = text; status.className = `status ${error ? 'error' : ''}`; }
@@ -65,13 +92,16 @@ function drawSegments() {
     state.segments[+input.dataset.i].text = input.value;
     if (+input.dataset.i === 0) { caption.value = input.value; syncCaption(); }
     else syncPreview();
+    scheduleHistorySave();
   });
 }
-caption.oninput = syncCaption;
-$('#clearCaption').onclick = () => { caption.value = ''; syncCaption(); };
+caption.oninput = () => { syncCaption(); scheduleHistorySave(); };
+$('#clearCaption').onclick = () => { caption.value = ''; syncCaption(); scheduleHistorySave(); };
 fileInput.onchange = (event) => {
   state.file = event.target.files[0];
   if (!state.file) return;
+  currentHistoryId = null;
+  clearTimeout(historySaveTimer);
   state.segments = [];
   caption.value = '';
   drawSegments(); syncCaption();
@@ -91,15 +121,16 @@ $('#seek').oninput = () => { video.currentTime = $('#seek').value; };
 document.querySelectorAll('.swatch').forEach((button) => button.onclick = () => {
   document.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
   button.classList.add('active'); state.color = button.dataset.color; applyPreviewStyle(); setStatus(`Warna subtitle: ${button.querySelector('span')?.textContent || 'dipilih'}.`);
+  scheduleHistorySave();
 });
 document.querySelectorAll('.mini').forEach((button) => button.onclick = () => {
   document.querySelectorAll('.mini').forEach((x) => x.classList.remove('active'));
-  button.classList.add('active'); state.template = button.dataset.template; applyPreviewStyle();
+  button.classList.add('active'); state.template = button.dataset.template; applyPreviewStyle(); scheduleHistorySave();
 });
-$('#fontSize').oninput = (e) => { state.fontSize = Number(e.target.value); $('#fontSizeValue').textContent = `${state.fontSize}px`; applyPreviewStyle(); };
-$('#position').onchange = (e) => { state.position = e.target.value; applyPreviewStyle(); };
-$('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPreviewStyle(); };
-$('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; applyPreviewFormat(); };
+$('#fontSize').oninput = (e) => { state.fontSize = Number(e.target.value); $('#fontSizeValue').textContent = `${state.fontSize}px`; applyPreviewStyle(); scheduleHistorySave(); };
+$('#position').onchange = (e) => { state.position = e.target.value; applyPreviewStyle(); scheduleHistorySave(); };
+$('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPreviewStyle(); scheduleHistorySave(); };
+$('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; applyPreviewFormat(); scheduleHistorySave(); };
 async function transcribeCurrentFile() {
   if (!state.file) return setStatus('Pilih video terlebih dahulu.', true);
   if (transcribeController) transcribeController.abort();
@@ -109,17 +140,20 @@ async function transcribeCurrentFile() {
   const form = new FormData(); form.append('video', selectedFile);
   setStatus('Mengambil suara dan membuat teks otomatis...'); setBusy(true);
   try {
-    const response = await fetch('/api/transcribe', { method: 'POST', body: form, signal: controller.signal });
+    const response = await authenticatedFetch('/api/transcribe', { method: 'POST', body: form, signal: controller.signal });
     const contentType = response.headers.get('content-type') || '';
     const data = contentType.includes('application/json')
       ? await response.json()
       : { error: response.ok ? 'Server mengembalikan respons yang tidak dikenali.' : `Server sedang memulai ulang atau sibuk (HTTP ${response.status}). Coba lagi.` };
     if (!response.ok) throw Error(data.error);
     if (state.file !== selectedFile || transcribeController !== controller) return;
+    currentHistoryId = data.historyId || null;
     state.segments = data.segments || [];
     caption.value = state.segments[0]?.text || '';
     syncCaption(); drawSegments();
-    setStatus(`${state.segments.length} segmen siap diedit. Atur template sebelum ekspor.`);
+    setStatus(data.historySaved
+      ? `${state.segments.length} segmen siap diedit. Riwayat tersimpan.`
+      : `${state.segments.length} segmen siap diedit, tetapi riwayat belum tersimpan.`, !data.historySaved);
   } catch (error) {
     if (error.name !== 'AbortError' && state.file === selectedFile) setStatus(error.message, true);
   } finally {
@@ -162,7 +196,7 @@ $('#exportBtn').onclick = async () => {
   showLoading('Memproses video...');
   setStatus('Video sedang diproses. Jangan tutup halaman.');
   try {
-    const response = await fetch('/api/export', { method: 'POST', body: form });
+    const response = await authenticatedFetch('/api/export', { method: 'POST', body: form });
     if (!response.ok) { const data = await response.json(); throw Error(data.error); }
     showLoading('Mengunduh video...');
     setStatus('Render selesai. Sedang mengunduh file video...');

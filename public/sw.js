@@ -1,5 +1,5 @@
-const CACHE = 'videoteks-shell-v10';
-const SHELL = ['/', '/app.js', '/audio.html', '/audio.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'videoteks-shell-v11';
+const SHELL = ['/', '/login.js', '/firebase-client.js', '/app.html', '/app.js', '/audio.html', '/audio.js', '/voice.html', '/voice.js', '/history.html', '/history.js', '/auth-shell.css', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

@@ -1,3 +1,7 @@
+import { authenticatedFetch, requireLogin } from './firebase-client.js';
+
+await requireLogin();
+
 const $ = (selector) => document.querySelector(selector);
 const videoInput = $('#videoInput');
 const audioInput = $('#audioInput');
@@ -169,7 +173,7 @@ replaceBtn.onclick = async () => {
   replaceBtn.textContent = speedMode.value === 'manual' ? 'Menerapkan kecepatan...' : 'Memproses video...';
 
   try {
-    const response = await fetch('/api/replace-audio', { method: 'POST', body: form });
+    const response = await authenticatedFetch('/api/replace-audio', { method: 'POST', body: form });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Video gagal diproses.');

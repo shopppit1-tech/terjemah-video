@@ -7,10 +7,29 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth as getFirebaseAdminAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const exec = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
+const FIREBASE_PROJECT_ID = 'videoteks-a82c1';
+let firebaseAdminAuth = null;
+let firebaseDb = null;
+try {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    const adminApp = getApps().find((entry) => entry.name === 'videoteks') || initializeApp({
+      credential: cert(serviceAccount),
+      projectId: FIREBASE_PROJECT_ID
+    }, 'videoteks');
+    firebaseAdminAuth = getFirebaseAdminAuth(adminApp);
+    firebaseDb = getFirestore(adminApp);
+  }
+} catch (error) {
+  console.error('[firebase] konfigurasi service account tidak valid:', error.message);
+}
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const GEMINI_KEY_COOLDOWN_MS = 5 * 60 * 1000;
 const INLINE_AUDIO_MAX_BYTES = 12 * 1024 * 1024;
@@ -19,6 +38,24 @@ const geminiKeyCooldowns = new Map();
 const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limits: { fileSize: 500 * 1024 * 1024 } });
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(process.cwd(), 'public')));
+
+async function requireFirebaseUser(req, res, next) {
+  if (!firebaseAdminAuth || !firebaseDb) {
+    return res.status(503).json({ error: 'Login dan riwayat belum dikonfigurasi. Admin Firebase perlu ditambahkan di environment server.' });
+  }
+  const token = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
+  if (!token) return res.status(401).json({ error: 'Silakan masuk dengan Google terlebih dahulu.' });
+  try {
+    req.firebaseUser = await firebaseAdminAuth.verifyIdToken(token);
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Sesi Google tidak valid atau sudah kedaluwarsa. Masuk kembali.' });
+  }
+}
+
+function historyCollection(uid) {
+  return firebaseDb.collection('users').doc(uid).collection('history');
+}
 
 const TTS_VOICES = new Set(['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']);
 
@@ -234,7 +271,7 @@ function responseText(data) { return data?.candidates?.[0]?.content?.parts?.map(
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'videoteks', provider: 'gemini' }));
 
-app.post('/api/transcribe', upload.single('video'), async (req, res) => {
+app.post('/api/transcribe', requireFirebaseUser, upload.single('video'), async (req, res) => {
   if (!requireKey(res)) return;
   if (!req.file) return res.status(400).json({ error: 'File video wajib dipilih.' });
   const audio = `${req.file.path}.mp3`;
@@ -275,7 +312,22 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
           const parsed = jsonPart(responseText(data));
           const segments = (parsed?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || (Number(s.start) + 2), text: String(s.text || '').trim() })).filter(s => s.text);
           rotateGeminiKeyAfter(apiKey);
-          res.json({ text: segments.map(s => s.text).join(' '), segments });
+          const text = segments.map(s => s.text).join('\n');
+          let historyId = null;
+          try {
+            const historyDoc = await historyCollection(req.firebaseUser.uid).add({
+              fileName: String(req.file.originalname || 'video').replace(/[\u0000-\u001f]/g, '').slice(0, 180),
+              text,
+              segments,
+              settings: {},
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
+            historyId = historyDoc.id;
+          } catch (historyError) {
+            console.warn('[history] transkripsi berhasil, tetapi riwayat gagal disimpan:', historyError.message);
+          }
+          res.json({ text, segments, historyId, historySaved: Boolean(historyId) });
           return;
         } catch (error) {
           if (!isGeminiRetryableError(error.status, error.message)) {
@@ -292,7 +344,7 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
   finally { await cleanup(req.file.path, audio); }
 });
 
-app.post('/api/translate', async (req, res) => {
+app.post('/api/translate', requireFirebaseUser, async (req, res) => {
   if (!requireKey(res)) return;
   const { text, target = 'Indonesian' } = req.body || {};
   if (!text) return res.status(400).json({ error: 'Teks wajib diisi.' });
@@ -303,7 +355,7 @@ app.post('/api/translate', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/export', upload.single('video'), async (req, res) => {
+app.post('/api/export', requireFirebaseUser, upload.single('video'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'File video wajib dipilih.' });
   const id = crypto.randomUUID(); const srt = path.join(os.tmpdir(), `videoteks-${id}.srt`); const out = path.join(os.tmpdir(), `videoteks-${id}.mp4`);
   try {
@@ -332,7 +384,7 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
   } catch (e) { console.error(e); await cleanup(req.file.path, srt, out); res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
+app.post('/api/replace-audio', requireFirebaseUser, upload.fields([{ name: 'video', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
   const videoFile = req.files?.video?.[0];
   const audioFile = req.files?.audio?.[0];
   if (!videoFile || !audioFile) {
@@ -390,10 +442,69 @@ app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { 
   }
 });
 
-app.get('*', (_req, res) => res.sendFile(path.join(process.cwd(), 'public', 'index.html')));
-app.listen(PORT, '0.0.0.0', () => console.log(`VideoTeks Gemini berjalan di port ${PORT}`));
+app.get('/api/history', requireFirebaseUser, async (req, res) => {
+  try {
+    const snapshot = await historyCollection(req.firebaseUser.uid).orderBy('createdAt', 'desc').limit(100).get();
+    res.json({ items: snapshot.docs.map((document) => ({ id: document.id, ...document.data() })) });
+  } catch (error) {
+    console.error('[history] gagal memuat:', error.message);
+    res.status(500).json({ error: 'Riwayat gagal dimuat dari Firestore.' });
+  }
+});
 
-app.post('/api/generate-voice', async (req, res) => {
+app.patch('/api/history/:id', requireFirebaseUser, async (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return res.status(400).json({ error: 'ID riwayat tidak valid.' });
+  try {
+    const ref = historyCollection(req.firebaseUser.uid).doc(id);
+    const document = await ref.get();
+    if (!document.exists) return res.status(404).json({ error: 'Riwayat tidak ditemukan.' });
+    const rawSegments = Array.isArray(req.body?.segments) ? req.body.segments : [];
+    if (rawSegments.length > 3000) return res.status(413).json({ error: 'Jumlah segmen terlalu besar untuk disimpan.' });
+    const segments = rawSegments.map((segment) => ({
+      start: Number.isFinite(Number(segment.start)) ? Number(segment.start) : 0,
+      end: Number.isFinite(Number(segment.end)) ? Number(segment.end) : 0,
+      text: String(segment.text || '').slice(0, 2000)
+    }));
+    const settings = req.body?.settings && typeof req.body.settings === 'object' ? {
+      color: String(req.body.settings.color || '').slice(0, 32),
+      template: String(req.body.settings.template || '').slice(0, 32),
+      fontSize: Number(req.body.settings.fontSize) || 28,
+      position: String(req.body.settings.position || '').slice(0, 16),
+      fontFamily: String(req.body.settings.fontFamily || '').slice(0, 64),
+      outputFormat: String(req.body.settings.outputFormat || '').slice(0, 24)
+    } : document.data().settings || {};
+    await ref.update({
+      text: String(req.body?.text || '').slice(0, 200000),
+      segments,
+      settings,
+      updatedAt: Date.now()
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[history] gagal memperbarui:', error.message);
+    res.status(500).json({ error: 'Perubahan riwayat gagal disimpan.' });
+  }
+});
+
+app.delete('/api/history/:id', requireFirebaseUser, async (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return res.status(400).json({ error: 'ID riwayat tidak valid.' });
+  try {
+    const ref = historyCollection(req.firebaseUser.uid).doc(id);
+    const document = await ref.get();
+    if (!document.exists) return res.status(404).json({ error: 'Riwayat tidak ditemukan.' });
+    await ref.delete();
+    res.status(204).end();
+  } catch (error) {
+    console.error('[history] gagal menghapus:', error.message);
+    res.status(500).json({ error: 'Riwayat gagal dihapus.' });
+  }
+});
+
+app.get('*', (_req, res) => res.sendFile(path.join(process.cwd(), 'public', 'index.html')));
+
+app.post('/api/generate-voice', requireFirebaseUser, async (req, res) => {
   if (!requireTtsKey(res)) return;
   const text = String(req.body?.text || '').trim();
   const voice = TTS_VOICES.has(req.body?.voice) ? req.body.voice : 'Kore';
@@ -420,3 +531,5 @@ app.post('/api/generate-voice', async (req, res) => {
     res.status(error.status === 429 ? 429 : 502).json({ error: error.message || 'Suara AI gagal dibuat.' });
   }
 });
+
+app.listen(PORT, '0.0.0.0', () => console.log(`VideoTeks Gemini berjalan di port ${PORT}`));

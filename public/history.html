@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101822">
+  <link rel="stylesheet" href="/auth-shell.css">
+  <script>document.documentElement.classList.add('auth-pending')</script>
+  <title>Riwayat — VideoTeks</title>
+</head>
+<body style="margin:0;background:#0c141d">
+  <header class="auth-bar"><span class="auth-bar__user" data-account-name>Memuat akun…</span><div class="auth-bar__actions"><a href="/app.html">Kembali</a><button type="button" data-sign-out>Keluar</button></div></header>
+  <main class="history-app">
+    <h1>Riwayat transkripsi</h1>
+    <p class="history-note">Teks dan segmen tersimpan per akun. File video tidak disimpan. Hapus item yang tidak dibutuhkan.</p>
+    <div id="historyStatus" class="history-status" role="status" aria-live="polite">Memuat riwayat…</div>
+    <section id="historyList" class="history-list" aria-label="Daftar riwayat" hidden></section>
+  </main>
+  <script type="module" src="/history.js"></script>
+</body>
+</html>
