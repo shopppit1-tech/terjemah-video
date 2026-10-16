@@ -11,10 +11,11 @@ const fileInput = $('#fileInput');
 const preview = $('#subtitlePreview');
 const status = $('#status');
 const caption = $('#caption');
+let transcribeController = null;
 
 function fmt(s) { return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
 function setStatus(text, error = false) { status.textContent = text; status.className = `status ${error ? 'error' : ''}`; }
-function setBusy(active, text = 'Sedang membuat teks otomatis...') { const overlay = $('#busyOverlay'); const button = $('#transcribeBtn'); if (overlay) overlay.classList.toggle('show', active); if (button) { button.disabled = active; button.style.opacity = active ? '.65' : '1'; button.textContent = active ? '⏳ Sedang bekerja...' : '▣ Buat Teks Otomatis'; } const title = $('#busyTitle'); if (title) title.textContent = text; }
+function setBusy(active, text = 'AI sedang mengenali suara...') { const overlay = $('#busyOverlay'); const button = $('#transcribeBtn'); if (overlay) overlay.classList.toggle('show', active); if (button) { button.disabled = active; button.style.opacity = active ? '.65' : '1'; button.textContent = active ? '⏳ Sedang bekerja...' : '↻ Buat Ulang Teks'; } const title = $('#busyTitle'); if (title) title.textContent = text; }
 function syncCaption() {
   if (state.segments[0]) {
     state.segments[0].text = caption.value;
@@ -71,11 +72,15 @@ $('#clearCaption').onclick = () => { caption.value = ''; syncCaption(); };
 fileInput.onchange = (event) => {
   state.file = event.target.files[0];
   if (!state.file) return;
+  state.segments = [];
+  caption.value = '';
+  drawSegments(); syncCaption();
   video.src = URL.createObjectURL(state.file);
-  video.onloadedmetadata = () => { $('#seek').max = video.duration; $('#duration').textContent = fmt(video.duration); applyPreviewFormat(); setStatus(`Video ${video.videoWidth}×${video.videoHeight}. Format output: ${state.outputFormat === 'source' ? 'asli' : state.outputFormat}.`); };
+  video.onloadedmetadata = () => { $('#seek').max = video.duration; $('#duration').textContent = fmt(video.duration); applyPreviewFormat(); };
   $('#empty').style.display = 'none';
   $('#videoWrap').classList.add('has-video');
-  setStatus('Video siap. Atur gaya, lalu klik “Buat Teks Otomatis”.');
+  setStatus('Video dipilih. AI mulai mengenali suara secara otomatis...');
+  void transcribeCurrentFile();
 };
 $('#playBtn').onclick = () => video.paused ? video.play() : video.pause();
 $('#muteBtn').onclick = () => { video.muted = !video.muted; $('#muteBtn').textContent = video.muted ? '🔇 Suara dimatikan' : '🔊 Suara asli'; };
@@ -95,19 +100,29 @@ $('#fontSize').oninput = (e) => { state.fontSize = Number(e.target.value); $('#f
 $('#position').onchange = (e) => { state.position = e.target.value; applyPreviewStyle(); };
 $('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPreviewStyle(); };
 $('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; applyPreviewFormat(); };
-$('#transcribeBtn').onclick = async () => {
+async function transcribeCurrentFile() {
   if (!state.file) return setStatus('Pilih video terlebih dahulu.', true);
-  const form = new FormData(); form.append('video', state.file);
-  setStatus('Menyiapkan audio ringkas dan membuat subtitle...'); setBusy(true);
+  if (transcribeController) transcribeController.abort();
+  const controller = new AbortController();
+  const selectedFile = state.file;
+  transcribeController = controller;
+  const form = new FormData(); form.append('video', selectedFile);
+  setStatus('Mengambil suara dan membuat teks otomatis...'); setBusy(true);
   try {
-    const response = await fetch('/api/transcribe', { method: 'POST', body: form });
+    const response = await fetch('/api/transcribe', { method: 'POST', body: form, signal: controller.signal });
     const data = await response.json(); if (!response.ok) throw Error(data.error);
+    if (state.file !== selectedFile || transcribeController !== controller) return;
     state.segments = data.segments || [];
     caption.value = state.segments[0]?.text || '';
     syncCaption(); drawSegments();
     setStatus(`${state.segments.length} segmen siap diedit. Atur template sebelum ekspor.`);
-  } catch (error) { setStatus(error.message, true); } finally { setBusy(false); }
-};
+  } catch (error) {
+    if (error.name !== 'AbortError' && state.file === selectedFile) setStatus(error.message, true);
+  } finally {
+    if (transcribeController === controller) { transcribeController = null; setBusy(false); }
+  }
+}
+$('#transcribeBtn').onclick = transcribeCurrentFile;
 $('#exportBtn').onclick = async () => {
   if (!state.file || !state.segments.length) return setStatus('Buat subtitle terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file); form.append('segments', JSON.stringify(state.segments));
