@@ -262,7 +262,7 @@ app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { 
     const duration = durations[0];
     if (!duration) throw new Error('Durasi video tidak dapat dibaca.');
 
-    const commonArgs = ['-y', '-i', videoFile.path, '-i', audioFile.path, '-map', '0:v:0', '-map', '1:a:0', '-map_metadata', '0', '-af', 'apad', '-t', duration.toFixed(3), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'];
+    const commonArgs = ['-y', '-i', videoFile.path, '-stream_loop', '-1', '-i', audioFile.path, '-map', '0:v:0', '-map', '1:a:0', '-map_metadata', '0', '-t', duration.toFixed(3), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'];
     let videoMode = 'copy';
     try {
       await exec('ffmpeg', [...commonArgs, '-c:v', 'copy', out]);
