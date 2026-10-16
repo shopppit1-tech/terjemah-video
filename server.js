@@ -230,9 +230,19 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
     const outputSize = settings.format === 'short' ? '720x1280' : settings.format === 'square' ? '720x720' : settings.format === 'landscape' ? '1280x720' : 'source size';
     const shape = settings.format === 'short' ? 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,' : settings.format === 'square' ? 'scale=720:720:force_original_aspect_ratio=increase,crop=720:720,' : settings.format === 'landscape' ? 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,' : '';
     const renderStartedAt = performance.now();
-    await exec('ffmpeg', ['-y', '-i', req.file.path, '-vf', `${shape}subtitles=${srt}:force_style='${style}'`, '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-movflags', 'faststart', out]);
+    const ffmpegArgs = ['-y', '-i', req.file.path, '-vf', `${shape}subtitles=${srt}:force_style='${style}'`, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25'];
+    let audioMode = 'copy';
+    try {
+      await exec('ffmpeg', [...ffmpegArgs, '-c:a', 'copy', out]);
+    } catch (error) {
+      const details = `${error.message}\n${error.stderr || ''}`;
+      if (!/could not find tag for codec|not currently supported in container|could not write header|codec .* incompatible with output/i.test(details)) throw error;
+      await cleanup(out);
+      audioMode = 'aac-fallback';
+      await exec('ffmpeg', [...ffmpegArgs, '-c:a', 'aac', '-b:a', '128k', out]);
+    }
     const outputStats = await fs.stat(out);
-    console.info(`[export] complete format=${settings.format} output=${outputSize} inputBytes=${req.file.size} outputBytes=${outputStats.size} renderMs=${Math.round(performance.now() - renderStartedAt)}`);
+    console.info(`[export] complete format=${settings.format} output=${outputSize} audio=${audioMode} inputBytes=${req.file.size} outputBytes=${outputStats.size} renderMs=${Math.round(performance.now() - renderStartedAt)}`);
     res.download(out, 'videoteks-subtitle.mp4', async () => { await cleanup(req.file.path, srt, out); });
   } catch (e) { console.error(e); await cleanup(req.file.path, srt, out); res.status(500).json({ error: e.message }); }
 });

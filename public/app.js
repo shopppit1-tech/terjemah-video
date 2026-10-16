@@ -122,7 +122,27 @@ $('#exportBtn').onclick = async () => {
     if (!response.ok) { const data = await response.json(); throw Error(data.error); }
     showLoading('Mengunduh video...');
     setStatus('Render selesai. Sedang mengunduh file video...');
-    const blob = await response.blob(); const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = 'videoteks-subtitle.mp4'; link.click();
+    const totalBytes = Number(response.headers.get('content-length')) || 0;
+    const reader = response.body?.getReader();
+    let blob;
+    if (reader) {
+      const chunks = [];
+      let receivedBytes = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedBytes += value.byteLength;
+        const progress = totalBytes ? Math.min(99, Math.floor(receivedBytes / totalBytes * 100)) : null;
+        const label = progress === null ? `Mengunduh video... ${(receivedBytes / 1048576).toFixed(1)} MB` : `Mengunduh video... ${progress}%`;
+        showLoading(label); setStatus(label);
+      }
+      blob = new Blob(chunks, { type: response.headers.get('content-type') || 'video/mp4' });
+    } else {
+      blob = await response.blob();
+    }
+    showLoading('Mengunduh video... 100%'); setStatus('Mengunduh video... 100%');
+    const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = 'videoteks-subtitle.mp4'; link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     setStatus('Selesai. Video dengan template pilihan sudah diunduh.');
   } catch (error) { setStatus(error.message, true); }
