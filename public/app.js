@@ -1,4 +1,5 @@
 import { authenticatedFetch, requireLogin } from './firebase-client.js';
+import { downloadName } from './download-utils.js';
 
 await requireLogin();
 
@@ -220,7 +221,7 @@ $('#exportBtn').onclick = async () => {
       blob = await response.blob();
     }
     showLoading('Mengunduh video... 100%'); setStatus('Mengunduh video... 100%');
-    const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = 'videoteks-subtitle.mp4'; link.click();
+    const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = downloadName('videoteks-subtitle', '.mp4'); link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     setStatus('Selesai. Video dengan template pilihan sudah diunduh.');
   } catch (error) { setStatus(error.message, true); }

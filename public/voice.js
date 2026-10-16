@@ -1,4 +1,5 @@
 import { authenticatedFetch, requireLogin } from './firebase-client.js';
+import { downloadName } from './download-utils.js';
 
 await requireLogin();
 
@@ -15,6 +16,10 @@ const audioHandoff = $('#audioHandoff');
 const status = $('#status');
 let audioUrl = null;
 let busy = false;
+
+downloadLink.addEventListener('click', () => {
+  downloadLink.download = downloadName('suara-ai-gemini', '.wav');
+});
 
 function saveAudioForHandoff(blob) {
   return new Promise((resolve, reject) => {

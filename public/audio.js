@@ -1,4 +1,5 @@
 import { authenticatedFetch, requireLogin } from './firebase-client.js';
+import { downloadName } from './download-utils.js';
 
 await requireLogin();
 
@@ -212,7 +213,7 @@ replaceBtn.onclick = async () => {
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = 'video-audio-baru.mp4';
+    link.download = downloadName('video-audio-baru', '.mp4');
     link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     const completion = speedMode.value === 'manual' ? `Video diunduh dengan kecepatan audio ${Number(manualSpeedSlider.value).toFixed(2)}×.` : speedMode.value === 'auto' ? 'Kecepatan audio disesuaikan otomatis dengan video.' : 'Kecepatan asli audio dipertahankan.';
