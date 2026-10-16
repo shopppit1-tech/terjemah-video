@@ -108,17 +108,6 @@ $('#transcribeBtn').onclick = async () => {
     setStatus(`${state.segments.length} segmen siap diedit. Atur template sebelum ekspor.`);
   } catch (error) { setStatus(error.message, true); } finally { setBusy(false); }
 };
-$('#translateBtn').onclick = async () => {
-  if (!state.segments.length) return setStatus('Buat teks otomatis terlebih dahulu.', true);
-  setStatus('Menerjemahkan subtitle...');
-  try {
-    const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: state.segments.map((s) => s.text).join('\n'), target: 'Indonesian' }) });
-    const data = await response.json(); if (!response.ok) throw Error(data.error);
-    const lines = data.text.split(/\r?\n/);
-    state.segments.forEach((s, i) => { s.text = lines[i] || s.text; });
-    caption.value = state.segments[0]?.text || ''; syncCaption(); drawSegments(); setStatus('Terjemahan selesai dan bisa diedit.');
-  } catch (error) { setStatus(error.message, true); }
-};
 $('#exportBtn').onclick = async () => {
   if (!state.file || !state.segments.length) return setStatus('Buat subtitle terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file); form.append('segments', JSON.stringify(state.segments));
