@@ -18,13 +18,14 @@ Prasyarat: Node.js 18+, FFmpeg, dan Gemini API key.
 ```bash
 npm install
 cp .env.example .env
-# isi GEMINI_API_KEY di .env
+# isi GEMINI_API_KEY di .env untuk Subtitle Video
+# isi GEMINI_TTS_API_KEY di .env untuk halaman Suara AI (opsional)
 npm start
 ```
 
 Buka `http://localhost:3000`.
 
-API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk deployment Railway, masukkan `GEMINI_API_KEY` dan `GEMINI_MODEL` di Variables.
+API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halaman Suara AI, gunakan nama terpisah `GEMINI_TTS_API_KEY` agar tidak bentrok dengan `GEMINI_API_KEY`. Model default-nya adalah Gemini 3 TTS `gemini-3.8-flash-tts`; model dapat diganti dengan `GEMINI_TTS_MODEL`.
 
 ## Deploy ke Render
 
@@ -38,6 +39,8 @@ API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk deploy
    - `GEMINI_API_KEY`: API key Gemini akun/project pertama
    - `GEMINI_API_KEY_2`: API key Gemini akun/project kedua
    - `GEMINI_MODEL`: `gemini-3.8-flash`
+   - `GEMINI_TTS_API_KEY`: API key Gemini khusus halaman Suara AI
+   - `GEMINI_TTS_MODEL`: `gemini-3.8-flash-tts`
 5. Jangan menaruh API key di file frontend atau GitHub.
 
 File `render.yaml` sudah disertakan agar Render dapat membaca konfigurasi dasar secara otomatis.

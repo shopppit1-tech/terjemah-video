@@ -29,6 +29,13 @@ function requireKey(res) {
   }
   return true;
 }
+function requireTtsKey(res) {
+  if (!process.env.GEMINI_TTS_API_KEY) {
+    res.status(503).json({ error: 'GEMINI_TTS_API_KEY belum diatur di environment variable server.' });
+    return false;
+  }
+  return true;
+}
 function configuredGeminiKeys() {
   return [...new Set([process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2].filter(Boolean))];
 }
@@ -311,7 +318,7 @@ app.get('*', (_req, res) => res.sendFile(path.join(process.cwd(), 'public', 'ind
 app.listen(PORT, '0.0.0.0', () => console.log(`VideoTeks Gemini berjalan di port ${PORT}`));
 
 app.post('/api/generate-voice', async (req, res) => {
-  if (!requireKey(res)) return;
+  if (!requireTtsKey(res)) return;
   const text = String(req.body?.text || '').trim();
   const voice = TTS_VOICES.has(req.body?.voice) ? req.body.voice : 'Kore';
   const style = String(req.body?.style || '').trim().slice(0, 240);
@@ -326,7 +333,7 @@ app.post('/api/generate-voice', async (req, res) => {
         responseModalities: ['AUDIO'],
         speechConfig: { voiceConfig: { voice } }
       }
-    });
+    }, process.env.GEMINI_TTS_API_KEY);
     const audioData = data?.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData?.data;
     if (!audioData) throw new Error('Gemini tidak mengembalikan data audio.');
     res.set('Content-Type', 'audio/wav');
