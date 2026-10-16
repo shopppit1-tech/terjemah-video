@@ -262,7 +262,28 @@ app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { 
     const duration = durations[0];
     if (!duration) throw new Error('Durasi video tidak dapat dibaca.');
 
-    const commonArgs = ['-y', '-i', videoFile.path, '-stream_loop', '-1', '-i', audioFile.path, '-map', '0:v:0', '-map', '1:a:0', '-map_metadata', '0', '-t', duration.toFixed(3), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'];
+    const { stdout: audioProbeText } = await exec('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=duration:format=duration', '-of', 'json', audioFile.path]);
+    const audioProbe = JSON.parse(audioProbeText || '{}');
+    const audioDurations = [audioProbe.streams?.[0]?.duration, audioProbe.format?.duration].map(Number).filter(value => Number.isFinite(value) && value > 0);
+    const audioDuration = audioDurations[0];
+    if (!audioDuration) throw new Error('Durasi file audio tidak dapat dibaca.');
+
+    const fitAudio = req.body.fitAudio !== 'false';
+    const speed = audioDuration / duration;
+    const atempoFilters = [];
+    if (fitAudio) {
+      let remainingSpeed = speed;
+      while (remainingSpeed > 2) { atempoFilters.push('atempo=2'); remainingSpeed /= 2; }
+      while (remainingSpeed < 0.5) { atempoFilters.push('atempo=0.5'); remainingSpeed /= 0.5; }
+      atempoFilters.push(`atempo=${remainingSpeed.toFixed(6)}`);
+    }
+
+    const inputArgs = ['-y', '-i', videoFile.path];
+    if (!fitAudio) inputArgs.push('-stream_loop', '-1');
+    inputArgs.push('-i', audioFile.path);
+    const commonArgs = [...inputArgs, '-map', '0:v:0', '-map', '1:a:0', '-map_metadata', '0'];
+    if (fitAudio) commonArgs.push('-af', `${atempoFilters.join(',')},apad`);
+    commonArgs.push('-t', duration.toFixed(3), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
     let videoMode = 'copy';
     try {
       await exec('ffmpeg', [...commonArgs, '-c:v', 'copy', out]);
@@ -272,7 +293,7 @@ app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { 
       await exec('ffmpeg', [...commonArgs, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-pix_fmt', 'yuv420p', out]);
     }
     const outputStats = await fs.stat(out);
-    console.info(`[replace-audio] complete videoMode=${videoMode} duration=${duration.toFixed(2)} inputVideoBytes=${videoFile.size} inputAudioBytes=${audioFile.size} outputBytes=${outputStats.size}`);
+    console.info(`[replace-audio] complete videoMode=${videoMode} fitAudio=${fitAudio} speed=${fitAudio ? speed.toFixed(3) : 'original'} videoDuration=${duration.toFixed(2)} audioDuration=${audioDuration.toFixed(2)} inputVideoBytes=${videoFile.size} inputAudioBytes=${audioFile.size} outputBytes=${outputStats.size}`);
     res.download(out, 'video-audio-baru.mp4', async () => { await cleanup(videoFile.path, audioFile.path, out); });
   } catch (error) {
     console.error(error);
