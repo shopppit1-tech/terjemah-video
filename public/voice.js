@@ -7,9 +7,25 @@ const generateBtn = $('#generateBtn');
 const result = $('#result');
 const audioResult = $('#audioResult');
 const downloadLink = $('#downloadLink');
+const audioHandoff = $('#audioHandoff');
 const status = $('#status');
 let audioUrl = null;
 let busy = false;
+
+function saveAudioForHandoff(blob) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('videoteks-audio', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('generated');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction('generated', 'readwrite');
+      transaction.objectStore('generated').put({ blob, name: 'suara-ai-gemini.wav', createdAt: Date.now() }, 'latest');
+      transaction.oncomplete = () => { database.close(); resolve(); };
+      transaction.onerror = () => { database.close(); reject(transaction.error); };
+    };
+  });
+}
 
 function setStatus(message, error = false) {
   status.textContent = message;
@@ -44,6 +60,8 @@ generateBtn.onclick = async () => {
     audioUrl = URL.createObjectURL(blob);
     audioResult.src = audioUrl;
     downloadLink.href = audioUrl;
+    audioHandoff.href = '/audio.html?generated=1';
+    try { await saveAudioForHandoff(blob); } catch { /* unduhan tetap tersedia jika penyimpanan browser tidak tersedia */ }
     result.hidden = false;
     setStatus('Selesai. Audio siap diputar atau diunduh.');
   } catch (error) {

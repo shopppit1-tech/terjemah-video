@@ -18,6 +18,36 @@ let videoUrl = null;
 let audioUrl = null;
 let busy = false;
 
+function loadGeneratedAudio() {
+  if (new URLSearchParams(location.search).get('generated') !== '1') return;
+  const request = indexedDB.open('videoteks-audio', 1);
+  request.onupgradeneeded = () => request.result.createObjectStore('generated');
+  request.onerror = () => setStatus('Penyimpanan audio AI tidak tersedia di browser.', true);
+  request.onsuccess = () => {
+    const database = request.result;
+    const getRequest = database.transaction('generated', 'readonly').objectStore('generated').get('latest');
+    getRequest.onsuccess = () => {
+      const record = getRequest.result;
+      database.close();
+      if (!record?.blob) {
+        setStatus('Audio AI tidak ditemukan. Buat audio terlebih dahulu.', true);
+        return;
+      }
+      const file = new File([record.blob], record.name || 'suara-ai-gemini.wav', { type: record.blob.type || 'audio/wav' });
+      try {
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        audioInput.files = transfer.files;
+        audioInput.dispatchEvent(new Event('change'));
+        setStatus('Audio AI sudah dimasukkan. Pilih video untuk melanjutkan.');
+      } catch {
+        setStatus('Audio AI tersimpan, tetapi browser tidak dapat memasukkannya otomatis.', true);
+      }
+    };
+    getRequest.onerror = () => { database.close(); setStatus('Audio AI tidak dapat dibaca.', true); };
+  };
+}
+
 function setStatus(message, error = false) {
   status.textContent = message;
   status.className = `status ${error ? 'error' : ''}`;
@@ -173,3 +203,5 @@ replaceBtn.onclick = async () => {
     updateButton();
   }
 };
+
+loadGeneratedAudio();
