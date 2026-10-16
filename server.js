@@ -247,5 +247,39 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
   } catch (e) { console.error(e); await cleanup(req.file.path, srt, out); res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
+  const videoFile = req.files?.video?.[0];
+  const audioFile = req.files?.audio?.[0];
+  if (!videoFile || !audioFile) {
+    await cleanup(videoFile?.path, audioFile?.path);
+    return res.status(400).json({ error: 'Pilih video dan file MP3 terlebih dahulu.' });
+  }
+  const out = path.join(os.tmpdir(), `videoteks-audio-${crypto.randomUUID()}.mp4`);
+  try {
+    const { stdout: probeText } = await exec('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration:format=duration', '-of', 'json', videoFile.path]);
+    const probe = JSON.parse(probeText || '{}');
+    const durations = [probe.streams?.[0]?.duration, probe.format?.duration].map(Number).filter(value => Number.isFinite(value) && value > 0);
+    const duration = durations[0];
+    if (!duration) throw new Error('Durasi video tidak dapat dibaca.');
+
+    const commonArgs = ['-y', '-i', videoFile.path, '-i', audioFile.path, '-map', '0:v:0', '-map', '1:a:0', '-map_metadata', '0', '-af', 'apad', '-t', duration.toFixed(3), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'];
+    let videoMode = 'copy';
+    try {
+      await exec('ffmpeg', [...commonArgs, '-c:v', 'copy', out]);
+    } catch {
+      await cleanup(out);
+      videoMode = 'h264-fallback';
+      await exec('ffmpeg', [...commonArgs, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-pix_fmt', 'yuv420p', out]);
+    }
+    const outputStats = await fs.stat(out);
+    console.info(`[replace-audio] complete videoMode=${videoMode} duration=${duration.toFixed(2)} inputVideoBytes=${videoFile.size} inputAudioBytes=${audioFile.size} outputBytes=${outputStats.size}`);
+    res.download(out, 'video-audio-baru.mp4', async () => { await cleanup(videoFile.path, audioFile.path, out); });
+  } catch (error) {
+    console.error(error);
+    await cleanup(videoFile.path, audioFile.path, out);
+    res.status(500).json({ error: error.message || 'Video gagal diproses.' });
+  }
+});
+
 app.get('*', (_req, res) => res.sendFile(path.join(process.cwd(), 'public', 'index.html')));
 app.listen(PORT, '0.0.0.0', () => console.log(`VideoTeks Gemini berjalan di port ${PORT}`));
