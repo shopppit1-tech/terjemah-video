@@ -138,11 +138,11 @@ function subtitleStyle(settings) {
   const font = allowedFonts.has(settings.fontFamily) ? settings.fontFamily : 'DejaVu Sans';
   const color = assColor(settings.color === 'gradient' ? '#8b5cf6' : settings.color);
   const size = Math.min(56, Math.max(14, Number(settings.fontSize) || 28));
-  const align = settings.position === 'top' ? 8 : settings.position === 'middle' ? 5 : 2;
+  const align = settings.position === 'top' ? 6 : settings.position === 'middle' ? 10 : 2;
   const margin = settings.position === 'top' ? 36 : settings.position === 'middle' ? 20 : 42;
   const templates = {
     pill: `BorderStyle=4,Outline=0,Shadow=0,BackColour=&H99000000`,
-    neon: `BorderStyle=4,Outline=2,Shadow=0,BackColour=&H66000000`,
+    neon: `BorderStyle=1,Outline=2,Shadow=0,BackColour=&H66000000`,
     minimal: `BorderStyle=1,Outline=0,Shadow=0,BackColour=&H00000000`,
     outline: `BorderStyle=1,Outline=2,Shadow=0,BackColour=&H00000000`,
     karaoke: `BorderStyle=4,Outline=1,Shadow=0,BackColour=&H88000000`,
@@ -150,7 +150,8 @@ function subtitleStyle(settings) {
     shadow: `BorderStyle=1,Outline=0,Shadow=3,BackColour=&H00000000`,
     gradient: `BorderStyle=4,Outline=1,Shadow=0,BackColour=&H66000000`
   };
-  return `FontName=${font},FontSize=${size},PrimaryColour=${color},OutlineColour=&H00000000,${templates[settings.template] || templates.pill},Alignment=${align},MarginV=${margin}`;
+  const outlineColor = settings.template === 'neon' ? assColor('#38e8ff') : '&H00000000';
+  return `FontName=${font},FontSize=${size},PrimaryColour=${color},OutlineColour=${outlineColor},${templates[settings.template] || templates.pill},Alignment=${align},MarginV=${margin}`;
 }
 async function cleanup(...files) { await Promise.all(files.filter(Boolean).map(f => fs.rm(f, { force: true }).catch(() => {}))); }
 function responseText(data) { return data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || ''; }
