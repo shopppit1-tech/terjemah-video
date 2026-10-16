@@ -227,9 +227,12 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
     if (!segments.length) return res.status(400).json({ error: 'Belum ada subtitle untuk diekspor.' });
     await fs.writeFile(srt, toSrt(segments), 'utf8');
     const style = subtitleStyle(settings);
-    const shape = settings.format === 'short' ? 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,' : settings.format === 'square' ? 'scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,' : settings.format === 'landscape' ? 'scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,' : '';
-    const preset = settings.format === 'short' ? 'ultrafast' : 'veryfast';
-    await exec('ffmpeg', ['-y', '-i', req.file.path, '-vf', `${shape}subtitles=${srt}:force_style='${style}'`, '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', preset, '-crf', '25', '-movflags', 'faststart', out]);
+    const outputSize = settings.format === 'short' ? '720x1280' : settings.format === 'square' ? '720x720' : settings.format === 'landscape' ? '1280x720' : 'source size';
+    const shape = settings.format === 'short' ? 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,' : settings.format === 'square' ? 'scale=720:720:force_original_aspect_ratio=increase,crop=720:720,' : settings.format === 'landscape' ? 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,' : '';
+    const renderStartedAt = performance.now();
+    await exec('ffmpeg', ['-y', '-i', req.file.path, '-vf', `${shape}subtitles=${srt}:force_style='${style}'`, '-c:a', 'aac', '-b:a', '128k', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-movflags', 'faststart', out]);
+    const outputStats = await fs.stat(out);
+    console.info(`[export] complete format=${settings.format} output=${outputSize} inputBytes=${req.file.size} outputBytes=${outputStats.size} renderMs=${Math.round(performance.now() - renderStartedAt)}`);
     res.download(out, 'videoteks-subtitle.mp4', async () => { await cleanup(req.file.path, srt, out); });
   } catch (e) { console.error(e); await cleanup(req.file.path, srt, out); res.status(500).json({ error: e.message }); }
 });

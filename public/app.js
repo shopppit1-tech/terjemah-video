@@ -100,12 +100,20 @@ $('#exportBtn').onclick = async () => {
   if (!state.file || !state.segments.length) return setStatus('Buat subtitle terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file); form.append('segments', JSON.stringify(state.segments));
   form.append('color', state.color); form.append('template', state.template); form.append('fontSize', String(state.fontSize)); form.append('position', state.position); form.append('fontFamily', state.fontFamily); form.append('format', state.outputFormat);
-  setStatus('Menerapkan template dan merender video...');
+  const button = $('#exportBtn');
+  const originalButton = button.innerHTML;
+  const showLoading = (label) => { button.disabled = true; button.setAttribute('aria-busy', 'true'); button.innerHTML = `<span class="button-spinner" aria-hidden="true"></span>${label}`; };
+  showLoading('Memproses video...');
+  setStatus('Video sedang diproses. Jangan tutup halaman.');
   try {
     const response = await fetch('/api/export', { method: 'POST', body: form });
     if (!response.ok) { const data = await response.json(); throw Error(data.error); }
-    const blob = await response.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'videoteks-subtitle.mp4'; link.click();
+    showLoading('Mengunduh video...');
+    setStatus('Render selesai. Sedang mengunduh file video...');
+    const blob = await response.blob(); const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = 'videoteks-subtitle.mp4'; link.click();
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     setStatus('Selesai. Video dengan template pilihan sudah diunduh.');
   } catch (error) { setStatus(error.message, true); }
+  finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = originalButton; }
 };
 applyPreviewStyle(); syncCaption();
