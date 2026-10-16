@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101822">
 <link rel="stylesheet" href="/auth-shell.css">
+<script src="/page-navigation.js" defer></script>
 <script>document.documentElement.classList.add('auth-pending')</script>
 <title>Suara AI — VideoTeks</title>
 <style>
@@ -18,7 +19,7 @@ body{min-height:100dvh}.app{width:min(100%,480px);min-height:100dvh;margin:auto;
 </style>
 </head>
 <body>
-<header class="auth-bar"><span class="auth-bar__user" data-account-name>Memuat akun…</span><div class="auth-bar__actions"><a href="/history.html">Riwayat</a><button type="button" data-sign-out>Keluar</button></div></header>
+<header class="auth-bar"><div class="auth-bar__actions"><a href="/history.html">Riwayat</a><div class="profile-wrap"><button class="profile-button" type="button" data-profile-trigger aria-label="Buka menu profil" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 20c.7-3.8 3-5.7 6.5-5.7s5.8 1.9 6.5 5.7"></path></svg></button><div id="profileMenu" class="profile-menu" data-profile-menu role="menu" hidden><p class="profile-email" data-account-email>Memuat email…</p><button class="profile-menu__signout" type="button" data-sign-out role="menuitem">Keluar</button></div></div></div></header>
 <main class="app">
   <nav class="page-nav" aria-label="Pilih fitur">
     <a href="/app.html">Subtitle Video</a>

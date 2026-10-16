@@ -35,6 +35,11 @@ export function waitForUser() {
   }));
 }
 
+function setProfileMenuOpen(button, menu, open) {
+  menu.hidden = !open;
+  button.setAttribute('aria-expanded', String(open));
+}
+
 export async function requireLogin() {
   const user = await waitForUser();
   if (!user) {
@@ -42,15 +47,37 @@ export async function requireLogin() {
     location.replace(`/?next=${encodeURIComponent(next)}`);
     return new Promise(() => {});
   }
+
   document.documentElement.classList.remove('auth-pending');
-  document.querySelectorAll('[data-account-name]').forEach((element) => {
-    element.textContent = user.displayName || user.email || 'Akun Google';
+  document.querySelectorAll('[data-account-email]').forEach((element) => {
+    element.textContent = user.email || user.displayName || 'Akun Google';
   });
+
+  const profileButton = document.querySelector('[data-profile-trigger]');
+  const profileMenu = document.querySelector('[data-profile-menu]');
+  if (profileButton && profileMenu) {
+    profileButton.addEventListener('click', () => {
+      setProfileMenuOpen(profileButton, profileMenu, profileMenu.hidden);
+    });
+    document.addEventListener('click', (event) => {
+      if (!profileMenu.contains(event.target) && !profileButton.contains(event.target)) {
+        setProfileMenuOpen(profileButton, profileMenu, false);
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        setProfileMenuOpen(profileButton, profileMenu, false);
+        profileButton.focus();
+      }
+    });
+  }
+
   document.querySelectorAll('[data-sign-out]').forEach((button) => {
     button.addEventListener('click', async () => {
       button.disabled = true;
       try {
         await signOut(auth);
+        document.body.classList.add('page-loading');
         location.replace('/');
       } catch {
         button.disabled = false;

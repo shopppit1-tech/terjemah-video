@@ -12,7 +12,10 @@ function setStatus(message, error = false) {
 
 try {
   const user = await waitForUser();
-  if (user) location.replace(nextUrl);
+  if (user) {
+    document.body.classList.add('page-loading');
+    location.replace(nextUrl);
+  }
 } catch {
   setStatus('Firebase belum siap. Muat ulang halaman atau hubungi pengelola.', true);
 }
@@ -22,6 +25,7 @@ button.addEventListener('click', async () => {
   setStatus('Menghubungkan ke Google…');
   try {
     await signInWithGoogle();
+    document.body.classList.add('page-loading');
     location.replace(nextUrl);
   } catch (error) {
     const messages = {
