@@ -71,8 +71,6 @@ document.querySelectorAll('.mini').forEach((button) => button.onclick = () => {
 $('#fontSize').oninput = (e) => { state.fontSize = Number(e.target.value); $('#fontSizeValue').textContent = `${state.fontSize}px`; applyPreviewStyle(); };
 $('#position').onchange = (e) => { state.position = e.target.value; applyPreviewStyle(); };
 $('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPreviewStyle(); };
-$('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; setStatus(e.target.value === 'auto' ? 'Kanvas mengikuti rasio video asli.' : `Format ${e.target.options[e.target.selectedIndex].text} dipilih.`); };
-
 $('#transcribeBtn').onclick = async () => {
   if (!state.file) return setStatus('Pilih video terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file);
