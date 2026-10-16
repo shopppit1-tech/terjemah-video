@@ -87,9 +87,18 @@ async function geminiRequest(model, body, fixedKey = null) {
       let keyQuotaExhausted = false;
       for (const activeModel of models) {
         for (let attempt = 0; attempt < 2; attempt += 1) {
-          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body)
-          });
+          let r;
+          try {
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000)
+            });
+          } catch (error) {
+            lastError = new Error(error.name === 'TimeoutError' ? 'Gemini request timeout setelah 30 detik.' : `Gemini request gagal: ${error.message}`);
+            lastError.status = 503;
+            if (attempt === 1) break;
+            await sleep(1200 * (attempt + 1));
+            continue;
+          }
           const data = await r.json().catch(() => ({}));
           if (r.ok) {
             if (!fixedKey) rotateGeminiKeyAfter(apiKey);
