@@ -112,7 +112,7 @@ $('#translateBtn').onclick = async () => {
   if (!state.segments.length) return setStatus('Buat teks otomatis terlebih dahulu.', true);
   setStatus('Menerjemahkan subtitle...');
   try {
-    const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: state.segments.map((s) => s.text).join('\n'), target: $('#target').value }) });
+    const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: state.segments.map((s) => s.text).join('\n'), target: 'Indonesian' }) });
     const data = await response.json(); if (!response.ok) throw Error(data.error);
     const lines = data.text.split(/\r?\n/);
     state.segments.forEach((s, i) => { s.text = lines[i] || s.text; });
