@@ -1,4 +1,4 @@
-const CACHE = 'videoteks-shell-v9';
+const CACHE = 'videoteks-shell-v10';
 const SHELL = ['/', '/app.js', '/audio.html', '/audio.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));

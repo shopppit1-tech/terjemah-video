@@ -5,7 +5,10 @@ const videoPreview = $('#videoPreview');
 const audioPreview = $('#audioPreview');
 const videoName = $('#videoName');
 const audioName = $('#audioName');
-const fitAudio = $('#fitAudio');
+const speedMode = $('#speedMode');
+const manualSpeed = $('#manualSpeed');
+const manualSpeedSlider = $('#manualSpeedSlider');
+const manualSpeedValue = $('#manualSpeedValue');
 const fitInfo = $('#fitInfo');
 const replaceBtn = $('#replaceBtn');
 const status = $('#status');
@@ -23,27 +26,36 @@ function updateButton() {
   replaceBtn.disabled = busy || !videoInput.files[0] || !audioInput.files[0];
   videoInput.disabled = busy;
   audioInput.disabled = busy;
-  fitAudio.disabled = busy;
+  speedMode.disabled = busy;
+  manualSpeedSlider.disabled = busy;
 }
 function updateFitInfo() {
+  manualSpeed.hidden = speedMode.value !== 'manual';
+  manualSpeedValue.textContent = `${Number(manualSpeedSlider.value).toFixed(2).replace('.', ',')}×`;
   if (!videoInput.files[0] || !audioInput.files[0]) {
     fitInfo.hidden = true;
     return;
   }
   fitInfo.hidden = false;
-  if (!fitAudio.checked) {
-    fitInfo.textContent = 'Kecepatan asli dipertahankan; audio pendek diulang dan audio panjang dipotong.';
-    return;
-  }
   const videoDuration = Number(videoPreview.duration);
   const audioDuration = Number(audioPreview.duration);
+  if (speedMode.value === 'original') {
+    fitInfo.textContent = 'Kecepatan audio asli dipertahankan; audio pendek diulang dan audio panjang dipotong agar sepanjang video.';
+    return;
+  }
   if (!Number.isFinite(videoDuration) || !Number.isFinite(audioDuration) || videoDuration <= 0 || audioDuration <= 0) {
     fitInfo.textContent = 'Membaca durasi video dan audio...';
     return;
   }
-  const speed = audioDuration / videoDuration;
+  const speed = speedMode.value === 'manual' ? Number(manualSpeedSlider.value) : audioDuration / videoDuration;
+  const adjustedDuration = audioDuration / speed;
   const action = speed > 1.02 ? 'dipercepat' : speed < 0.98 ? 'diperlambat' : 'hampir normal';
-  fitInfo.textContent = `Perkiraan kecepatan ${speed.toFixed(2)}× (${action}) agar pas dengan video.`;
+  if (speedMode.value === 'manual') {
+    const tail = adjustedDuration > videoDuration + 0.05 ? 'bagian akhir audio akan dipotong' : adjustedDuration < videoDuration - 0.05 ? 'sisa durasi video akan hening' : 'durasi audio hampir pas';
+    fitInfo.textContent = `Kecepatan ${speed.toFixed(2)}× (${action}); audio setelah diatur sekitar ${adjustedDuration.toFixed(1)} dtk. ${tail}.`;
+  } else {
+    fitInfo.textContent = `Kecepatan otomatis ${speed.toFixed(2)}× (${action}) agar audio pas dengan durasi video.`;
+  }
 }
 function showProgress(percent) {
   progress.hidden = false;
@@ -58,7 +70,8 @@ function clearProgress() {
 
 videoPreview.addEventListener('loadedmetadata', updateFitInfo);
 audioPreview.addEventListener('loadedmetadata', updateFitInfo);
-fitAudio.onchange = updateFitInfo;
+speedMode.onchange = updateFitInfo;
+manualSpeedSlider.oninput = updateFitInfo;
 
 videoInput.onchange = () => {
   const file = videoInput.files[0];
@@ -100,12 +113,14 @@ replaceBtn.onclick = async () => {
   const form = new FormData();
   form.append('video', videoFile);
   form.append('audio', audioFile);
-  form.append('fitAudio', fitAudio.checked ? 'true' : 'false');
+  form.append('audioMode', speedMode.value);
+  form.append('manualSpeed', manualSpeedSlider.value);
   busy = true;
   updateButton();
   clearProgress();
-  setStatus(fitAudio.checked ? 'Menyamakan kecepatan audio dengan durasi video...' : 'Mengganti suara tanpa mengubah kecepatannya...');
-  replaceBtn.textContent = fitAudio.checked ? 'Menyesuaikan audio...' : 'Memproses video...';
+  const modeMessage = speedMode.value === 'auto' ? 'Menyamakan kecepatan audio dengan durasi video...' : speedMode.value === 'manual' ? `Mengatur kecepatan audio ${Number(manualSpeedSlider.value).toFixed(2)}×...` : 'Mengganti suara tanpa mengubah kecepatan...';
+  setStatus(modeMessage);
+  replaceBtn.textContent = speedMode.value === 'manual' ? 'Menerapkan kecepatan...' : 'Memproses video...';
 
   try {
     const response = await fetch('/api/replace-audio', { method: 'POST', body: form });
@@ -148,7 +163,8 @@ replaceBtn.onclick = async () => {
     link.download = 'video-audio-baru.mp4';
     link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
-    setStatus(fitAudio.checked ? 'Selesai. Kecepatan audio sudah disesuaikan dengan video.' : 'Selesai. Audio asli sudah diganti dan video diunduh.');
+    const completion = speedMode.value === 'manual' ? `Video diunduh dengan kecepatan audio ${Number(manualSpeedSlider.value).toFixed(2)}×.` : speedMode.value === 'auto' ? 'Kecepatan audio disesuaikan otomatis dengan video.' : 'Kecepatan asli audio dipertahankan.';
+    setStatus(`Selesai. ${completion}`);
   } catch (error) {
     setStatus(error.message, true);
   } finally {
