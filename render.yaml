@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: videoteks
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY_2
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
