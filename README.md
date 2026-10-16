@@ -38,6 +38,7 @@ API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halama
 4. Tambahkan environment variable di Render:
    - `GEMINI_API_KEY`: API key Gemini akun/project pertama
    - `GEMINI_API_KEY_2`: API key Gemini akun/project kedua
+   - `GEMINI_API_KEY_3`: API key Gemini akun/project ketiga, ikut rotasi otomatis
    - `GEMINI_MODEL`: `gemini-3.8-flash`
    - `GEMINI_TTS_API_KEY`: API key Gemini khusus halaman Suara AI
    - `GEMINI_TTS_MODEL`: `gemini-3.8-flash-tts`

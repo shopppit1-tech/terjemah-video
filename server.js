@@ -23,7 +23,7 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 const TTS_VOICES = new Set(['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']);
 
 function requireKey(res) {
-  if (!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY_2) {
+  if (!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY_2 && !process.env.GEMINI_API_KEY_3) {
     res.status(503).json({ error: 'GEMINI_API_KEY belum diatur di environment variable server.' });
     return false;
   }
@@ -37,7 +37,7 @@ function requireTtsKey(res) {
   return true;
 }
 function configuredGeminiKeys() {
-  return [...new Set([process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2].filter(Boolean))];
+  return [...new Set([process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3].filter(Boolean))];
 }
 function geminiKeysInRotation() {
   const keys = configuredGeminiKeys();
