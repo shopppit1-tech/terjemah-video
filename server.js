@@ -13,6 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const GEMINI_KEY_COOLDOWN_MS = 5 * 60 * 1000;
+const INLINE_AUDIO_MAX_BYTES = 12 * 1024 * 1024;
 let nextGeminiKeyIndex = 0;
 const geminiKeyCooldowns = new Map();
 const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limits: { fileSize: 500 * 1024 * 1024 } });
@@ -162,16 +163,34 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
   if (!requireKey(res)) return;
   if (!req.file) return res.status(400).json({ error: 'File video wajib dipilih.' });
   const audio = `${req.file.path}.mp3`;
+  const requestStartedAt = performance.now();
   try {
-    await exec('ffmpeg', ['-y', '-i', req.file.path, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audio]);
+    const extractionStartedAt = performance.now();
+    await exec('ffmpeg', ['-y', '-i', req.file.path, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', audio]);
+    const extractionMs = Math.round(performance.now() - extractionStartedAt);
+    const audioStats = await fs.stat(audio);
+    const useInlineAudio = audioStats.size <= INLINE_AUDIO_MAX_BYTES;
+    const inlineAudio = useInlineAudio ? await fs.readFile(audio, 'base64') : null;
+    console.info(`[transcribe] audio ready mode=${useInlineAudio ? 'inline' : 'files'} bytes=${audioStats.size} extractMs=${extractionMs}`);
     const prompt = `Transkripsikan audio ini menjadi subtitle. Kembalikan JSON valid saja dengan bentuk {"segments":[{"start":0.0,"end":2.5,"text":"..."}]}. Gunakan waktu dalam detik, urutkan dari awal sampai akhir, pecah kalimat menjadi segmen pendek yang nyaman dibaca, dan tulis teks persis sesuai ucapan dalam bahasa aslinya. Jangan tambahkan markdown atau komentar.`;
     const keys = geminiKeysInRotation();
     if (!keys.length) throw new Error(geminiKeyWaitMessage());
     let lastError;
     for (const apiKey of keys) {
       try {
-        const file = await uploadToGemini(audio, 'audio/mpeg', apiKey);
-        const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }, { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'audio/mpeg' } }] }], generationConfig: { responseMimeType: 'application/json' } }, apiKey);
+        let audioPart;
+        let uploadMs = 0;
+        if (useInlineAudio) {
+          audioPart = { inlineData: { mimeType: 'audio/mpeg', data: inlineAudio } };
+        } else {
+          const uploadStartedAt = performance.now();
+          const file = await uploadToGemini(audio, 'audio/mpeg', apiKey);
+          uploadMs = Math.round(performance.now() - uploadStartedAt);
+          audioPart = { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'audio/mpeg' } };
+        }
+        const inferenceStartedAt = performance.now();
+        const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }, audioPart] }], generationConfig: { responseMimeType: 'application/json' } }, apiKey);
+        console.info(`[transcribe] complete mode=${useInlineAudio ? 'inline' : 'files'} bytes=${audioStats.size} extractMs=${extractionMs} uploadMs=${uploadMs} generateMs=${Math.round(performance.now() - inferenceStartedAt)} totalMs=${Math.round(performance.now() - requestStartedAt)}`);
         const parsed = jsonPart(responseText(data));
         const segments = (parsed?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || (Number(s.start) + 2), text: String(s.text || '').trim() })).filter(s => s.text);
         rotateGeminiKeyAfter(apiKey);

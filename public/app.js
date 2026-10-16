@@ -75,7 +75,7 @@ $('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPre
 $('#transcribeBtn').onclick = async () => {
   if (!state.file) return setStatus('Pilih video terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file);
-  setStatus('Mengekstrak suara asli dan membuat subtitle...'); setBusy(true);
+  setStatus('Menyiapkan audio ringkas dan membuat subtitle...'); setBusy(true);
   try {
     const response = await fetch('/api/transcribe', { method: 'POST', body: form });
     const data = await response.json(); if (!response.ok) throw Error(data.error);
