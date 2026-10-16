@@ -72,6 +72,27 @@ function coolDownGeminiKey(apiKey, data, message) {
   geminiKeyCooldowns.set(apiKey, Date.now() + geminiQuotaCooldownMs(data, message));
   rotateGeminiKeyAfter(apiKey);
 }
+function isGeminiKeyAuthError(status, message) {
+  return [400, 401, 403].includes(Number(status)) && /api.?key.*(invalid|not valid|expired)|unauthenticated|permission denied|access denied|forbidden|not authorized/i.test(message || '');
+}
+function isGeminiRetryableError(status, message) {
+  return isGeminiQuotaError(status, message) || isGeminiKeyAuthError(status, message) ||
+    [408, 425, 500, 502, 503, 504].includes(Number(status)) ||
+    /high demand|overloaded|temporarily unavailable|unavailable|timeout|fetch failed|network error|ECONNRESET|ECONNREFUSED/i.test(message || '');
+}
+function coolDownGeminiKeyAfterFailure(apiKey, error) {
+  if (isGeminiQuotaError(error.status, error.message)) {
+    coolDownGeminiKey(apiKey, error.responseData, error.message);
+    return;
+  }
+  const retryDelay = error.responseData?.error?.details?.find(detail => String(detail['@type'] || '').includes('RetryInfo'))?.retryDelay;
+  const seconds = String(retryDelay || error.message || '').match(/(\d+(?:\.\d+)?)s\b/i)?.[1];
+  const cooldownMs = isGeminiKeyAuthError(error.status, error.message)
+    ? 60 * 60 * 1000
+    : seconds ? Math.max(1000, Math.min(60000, Math.ceil(Number(seconds) * 1000))) : 15000;
+  geminiKeyCooldowns.set(apiKey, Date.now() + cooldownMs);
+  rotateGeminiKeyAfter(apiKey);
+}
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function geminiRequest(model, body, fixedKey = null) {
   const models = [model || 'gemini-3.8-flash'];
@@ -95,7 +116,7 @@ async function geminiRequest(model, body, fixedKey = null) {
           } catch (error) {
             lastError = new Error(error.name === 'TimeoutError' ? 'Gemini request timeout setelah 30 detik.' : `Gemini request gagal: ${error.message}`);
             lastError.status = 503;
-            if (attempt === 1) break;
+            if (attempt === 1) { coolDownGeminiKeyAfterFailure(apiKey, lastError); break; }
             await sleep(1200 * (attempt + 1));
             continue;
           }
@@ -108,12 +129,19 @@ async function geminiRequest(model, body, fixedKey = null) {
           lastError.status = r.status;
           lastError.responseData = data;
           if (isGeminiQuotaError(r.status, lastError.message)) {
-            if (!fixedKey) coolDownGeminiKey(apiKey, data, lastError.message);
+            coolDownGeminiKeyAfterFailure(apiKey, lastError);
             keyQuotaExhausted = true;
             break;
           }
           const retryable = /high demand|overloaded|temporarily unavailable|unavailable/i.test(lastError.message) || [500, 502, 503, 504].includes(r.status);
-          if (!retryable) throw lastError;
+          if (!retryable) {
+            if (!isGeminiKeyAuthError(r.status, lastError.message)) throw lastError;
+            coolDownGeminiKeyAfterFailure(apiKey, lastError);
+            keyQuotaExhausted = true;
+            break;
+          }
+          if (attempt === 1) coolDownGeminiKeyAfterFailure(apiKey, lastError);
+          if (attempt === 1) break;
           await sleep(1200 * (attempt + 1));
         }
         if (keyQuotaExhausted) break;
@@ -126,27 +154,48 @@ async function geminiRequest(model, body, fixedKey = null) {
 }
 async function uploadToGemini(filePath, mimeType, apiKey) {
   const stat = await fs.stat(filePath);
-  const start = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': apiKey,
-      'X-Goog-Upload-Protocol': 'resumable',
-      'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(stat.size),
-      'X-Goog-Upload-Header-Content-Type': mimeType,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ file: { display_name: path.basename(filePath) } })
-  });
-  if (!start.ok) throw new Error(`Gemini upload start failed: ${start.status} ${await start.text()}`);
+  let start;
+  try {
+    start = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(stat.size),
+        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ file: { display_name: path.basename(filePath) } })
+    });
+  } catch (error) {
+    error.status = 503;
+    throw error;
+  }
+  if (!start.ok) {
+    const error = new Error(`Gemini upload start failed: ${start.status} ${await start.text()}`);
+    error.status = start.status;
+    throw error;
+  }
   const uploadUrl = start.headers.get('x-goog-upload-url');
   if (!uploadUrl) throw new Error('Gemini tidak mengembalikan upload URL.');
   const bytes = await fs.readFile(filePath);
-  const finish = await fetch(uploadUrl, {
-    method: 'POST', headers: { 'Content-Length': String(bytes.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: bytes
-  });
+  let finish;
+  try {
+    finish = await fetch(uploadUrl, {
+      method: 'POST', headers: { 'Content-Length': String(bytes.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: bytes
+    });
+  } catch (error) {
+    error.status = 503;
+    throw error;
+  }
   const fileInfo = await finish.json().catch(() => ({}));
-  if (!finish.ok) throw new Error(fileInfo?.error?.message || `Gemini upload failed: ${finish.status}`);
+  if (!finish.ok) {
+    const error = new Error(fileInfo?.error?.message || `Gemini upload failed: ${finish.status}`);
+    error.status = finish.status;
+    error.responseData = fileInfo;
+    throw error;
+  }
   return fileInfo.file;
 }
 function jsonPart(text) {
@@ -199,36 +248,46 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
     const inlineAudio = useInlineAudio ? await fs.readFile(audio, 'base64') : null;
     console.info(`[transcribe] audio ready mode=${useInlineAudio ? 'inline' : 'files'} bytes=${audioStats.size} extractMs=${extractionMs}`);
     const prompt = `Transkripsikan audio ini menjadi subtitle. Kembalikan JSON valid saja dengan bentuk {"segments":[{"start":0.0,"end":2.5,"text":"..."}]}. Gunakan waktu dalam detik, urutkan dari awal sampai akhir, pecah kalimat menjadi segmen pendek yang nyaman dibaca, dan tulis teks persis sesuai ucapan dalam bahasa aslinya. Jangan tambahkan markdown atau komentar.`;
-    const keys = geminiKeysInRotation();
-    if (!keys.length) throw new Error(geminiKeyWaitMessage());
-    let lastError;
-    for (const apiKey of keys) {
-      try {
-        let audioPart;
-        let uploadMs = 0;
-        if (useInlineAudio) {
-          audioPart = { inlineData: { mimeType: 'audio/mpeg', data: inlineAudio } };
-        } else {
-          const uploadStartedAt = performance.now();
-          const file = await uploadToGemini(audio, 'audio/mpeg', apiKey);
-          uploadMs = Math.round(performance.now() - uploadStartedAt);
-          audioPart = { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'audio/mpeg' } };
+    while (true) {
+      const keys = geminiKeysInRotation();
+      if (!keys.length) {
+        const waits = configuredGeminiKeys().map(key => (geminiKeyCooldowns.get(key) || Date.now()) - Date.now()).filter(wait => wait > 0);
+        await sleep(Math.max(250, Math.min(...waits, 30000)));
+        continue;
+      }
+      for (const apiKey of keys) {
+        const keySlot = configuredGeminiKeys().indexOf(apiKey) + 1;
+        const keyCount = configuredGeminiKeys().length;
+        try {
+          let audioPart;
+          let uploadMs = 0;
+          if (useInlineAudio) {
+            audioPart = { inlineData: { mimeType: 'audio/mpeg', data: inlineAudio } };
+          } else {
+            const uploadStartedAt = performance.now();
+            const file = await uploadToGemini(audio, 'audio/mpeg', apiKey);
+            uploadMs = Math.round(performance.now() - uploadStartedAt);
+            audioPart = { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'audio/mpeg' } };
+          }
+          const inferenceStartedAt = performance.now();
+          const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }, audioPart] }], generationConfig: { responseMimeType: 'application/json' } }, apiKey);
+          console.info(`[transcribe] complete mode=${useInlineAudio ? 'inline' : 'files'} bytes=${audioStats.size} extractMs=${extractionMs} uploadMs=${uploadMs} generateMs=${Math.round(performance.now() - inferenceStartedAt)} totalMs=${Math.round(performance.now() - requestStartedAt)}`);
+          const parsed = jsonPart(responseText(data));
+          const segments = (parsed?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || (Number(s.start) + 2), text: String(s.text || '').trim() })).filter(s => s.text);
+          rotateGeminiKeyAfter(apiKey);
+          res.json({ text: segments.map(s => s.text).join(' '), segments });
+          return;
+        } catch (error) {
+          if (!isGeminiRetryableError(error.status, error.message)) {
+            rotateGeminiKeyAfter(apiKey);
+            throw error;
+          }
+          coolDownGeminiKeyAfterFailure(apiKey, error);
+          const waitSeconds = Math.max(1, Math.ceil(((geminiKeyCooldowns.get(apiKey) || Date.now()) - Date.now()) / 1000));
+          console.warn(`[transcribe] key_slot=${keySlot}/${keyCount} temporarily unavailable; rotating, retry_in=${waitSeconds}s status=${error.status || 'network'}`);
         }
-        const inferenceStartedAt = performance.now();
-        const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }, audioPart] }], generationConfig: { responseMimeType: 'application/json' } }, apiKey);
-        console.info(`[transcribe] complete mode=${useInlineAudio ? 'inline' : 'files'} bytes=${audioStats.size} extractMs=${extractionMs} uploadMs=${uploadMs} generateMs=${Math.round(performance.now() - inferenceStartedAt)} totalMs=${Math.round(performance.now() - requestStartedAt)}`);
-        const parsed = jsonPart(responseText(data));
-        const segments = (parsed?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || (Number(s.start) + 2), text: String(s.text || '').trim() })).filter(s => s.text);
-        rotateGeminiKeyAfter(apiKey);
-        res.json({ text: segments.map(s => s.text).join(' '), segments });
-        return;
-      } catch (error) {
-        lastError = error;
-        if (isGeminiQuotaError(error.status, error.message)) coolDownGeminiKey(apiKey, error.responseData, error.message);
-        else rotateGeminiKeyAfter(apiKey);
       }
     }
-    throw lastError || new Error('Semua Gemini API key gagal memproses audio.');
   } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
   finally { await cleanup(req.file.path, audio); }
 });
