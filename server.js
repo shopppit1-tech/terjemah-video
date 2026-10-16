@@ -20,6 +20,8 @@ const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limit
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(process.cwd(), 'public')));
 
+const TTS_VOICES = new Set(['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']);
+
 function requireKey(res) {
   if (!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY_2) {
     res.status(503).json({ error: 'GEMINI_API_KEY belum diatur di environment variable server.' });
@@ -307,3 +309,31 @@ app.post('/api/replace-audio', upload.fields([{ name: 'video', maxCount: 1 }, { 
 
 app.get('*', (_req, res) => res.sendFile(path.join(process.cwd(), 'public', 'index.html')));
 app.listen(PORT, '0.0.0.0', () => console.log(`VideoTeks Gemini berjalan di port ${PORT}`));
+
+app.post('/api/generate-voice', async (req, res) => {
+  if (!requireKey(res)) return;
+  const text = String(req.body?.text || '').trim();
+  const voice = TTS_VOICES.has(req.body?.voice) ? req.body.voice : 'Kore';
+  const style = String(req.body?.style || '').trim().slice(0, 240);
+  if (!text) return res.status(400).json({ error: 'Teks untuk suara wajib diisi.' });
+  if (text.length > 5000) return res.status(400).json({ error: 'Teks terlalu panjang. Maksimal 5.000 karakter per audio.' });
+  try {
+    const promptPart = { text };
+    if (style) promptPart.speech_metadata = { style };
+    const data = await geminiRequest(process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts', {
+      contents: [{ role: 'user', parts: [promptPart] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { voice } }
+      }
+    });
+    const audioData = data?.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData?.data;
+    if (!audioData) throw new Error('Gemini tidak mengembalikan data audio.');
+    res.set('Content-Type', 'audio/wav');
+    res.set('Content-Disposition', 'attachment; filename="suara-ai-gemini.wav"');
+    res.send(Buffer.from(audioData, 'base64'));
+  } catch (error) {
+    console.error('[generate-voice]', error);
+    res.status(error.status === 429 ? 429 : 502).json({ error: error.message || 'Suara AI gagal dibuat.' });
+  }
+});
