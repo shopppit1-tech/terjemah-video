@@ -57,6 +57,20 @@ function historyCollection(uid) {
   return firebaseDb.collection('users').doc(uid).collection('history');
 }
 
+function historyFailureMessage(error, action) {
+  const message = String(error?.message || '');
+  if (/API has not been used|firestore\.googleapis\.com|SERVICE_DISABLED|Cloud Firestore API.*disabled/i.test(message)) {
+    return 'Cloud Firestore API belum aktif. Aktifkan Cloud Firestore API di Google Cloud Console, lalu buat database Cloud Firestore di Firebase Console.';
+  }
+  if (/database.*(not found|does not exist)|NOT_FOUND.*database/i.test(message)) {
+    return 'Database Cloud Firestore belum dibuat. Buat database di Firebase Console untuk mengaktifkan riwayat.';
+  }
+  if (/PERMISSION_DENIED|permission denied|insufficient permission/i.test(message)) {
+    return 'Service account Firebase belum memiliki izin Firestore. Periksa akses IAM project Firebase.';
+  }
+  return `Riwayat gagal ${action} dari Firestore.`;
+}
+
 const TTS_VOICES = new Set(['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']);
 
 function requireKey(res) {
@@ -314,8 +328,11 @@ app.post('/api/transcribe', requireFirebaseUser, upload.single('video'), async (
           rotateGeminiKeyAfter(apiKey);
           const text = segments.map(s => s.text).join('\n');
           let historyId = null;
+          let historyErrorMessage = null;
           try {
             const historyDoc = await historyCollection(req.firebaseUser.uid).add({
+              type: 'video-transcription',
+              title: 'Transkripsi video',
               fileName: String(req.file.originalname || 'video').replace(/[\u0000-\u001f]/g, '').slice(0, 180),
               text,
               segments,
@@ -325,9 +342,10 @@ app.post('/api/transcribe', requireFirebaseUser, upload.single('video'), async (
             });
             historyId = historyDoc.id;
           } catch (historyError) {
+            historyErrorMessage = historyFailureMessage(historyError, 'disimpan');
             console.warn('[history] transkripsi berhasil, tetapi riwayat gagal disimpan:', historyError.message);
           }
-          res.json({ text, segments, historyId, historySaved: Boolean(historyId) });
+          res.json({ text, segments, historyId, historySaved: Boolean(historyId), historyError: historyErrorMessage });
           return;
         } catch (error) {
           if (!isGeminiRetryableError(error.status, error.message)) {
@@ -351,7 +369,37 @@ app.post('/api/translate', requireFirebaseUser, async (req, res) => {
   try {
     const prompt = `Terjemahkan teks subtitle berikut ke ${target}. Pertahankan jumlah baris dan urutan baris. Kembalikan hanya hasil terjemahan tanpa komentar.\n\n${text}`;
     const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1 } });
-    res.json({ text: responseText(data).trim() });
+    const translatedText = responseText(data).trim();
+    let historyId = null;
+    let historySaved = false;
+    let historyError = null;
+    try {
+      const requestedHistoryId = String(req.body.historyId || '');
+      if (requestedHistoryId) {
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestedHistoryId)) throw new Error('ID riwayat tidak valid.');
+        const ref = historyCollection(req.firebaseUser.uid).doc(requestedHistoryId);
+        const document = await ref.get();
+        if (!document.exists) throw new Error('Riwayat video tidak ditemukan.');
+        await ref.update({ translatedText: translatedText.slice(0, 100000), translationTarget: String(target).slice(0, 64), updatedAt: Date.now() });
+        historyId = requestedHistoryId;
+      } else {
+        const historyDoc = await historyCollection(req.firebaseUser.uid).add({
+          type: 'video-translation',
+          title: 'Terjemahan video',
+          sourceText: String(text).slice(0, 100000),
+          translatedText: translatedText.slice(0, 100000),
+          translationTarget: String(target).slice(0, 64),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+        historyId = historyDoc.id;
+      }
+      historySaved = true;
+    } catch (historyWriteError) {
+      historyError = historyFailureMessage(historyWriteError, 'disimpan');
+      console.warn('[history] terjemahan berhasil, tetapi riwayat gagal disimpan:', historyWriteError.message);
+    }
+    res.json({ text: translatedText, historyId, historySaved, historyError });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -434,6 +482,26 @@ app.post('/api/replace-audio', requireFirebaseUser, upload.fields([{ name: 'vide
     }
     const outputStats = await fs.stat(out);
     console.info(`[replace-audio] complete videoMode=${videoMode} audioMode=${audioMode} speed=${audioMode === 'original' ? 'original' : speed.toFixed(3)} videoDuration=${duration.toFixed(2)} audioDuration=${audioDuration.toFixed(2)} inputVideoBytes=${videoFile.size} inputAudioBytes=${audioFile.size} outputBytes=${outputStats.size}`);
+    let historyId = null;
+    try {
+      const historyDoc = await historyCollection(req.firebaseUser.uid).add({
+        type: 'audio-replace',
+        title: 'Ganti audio',
+        fileName: String(videoFile.originalname || 'video').replace(/[\u0000-\u001f]/g, '').slice(0, 180),
+        audioFileName: String(audioFile.originalname || 'audio').replace(/[\u0000-\u001f]/g, '').slice(0, 180),
+        audioMode,
+        speed: audioMode === 'original' ? null : Number(speed.toFixed(3)),
+        videoDuration: Number(duration.toFixed(2)),
+        audioDuration: Number(audioDuration.toFixed(2)),
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      historyId = historyDoc.id;
+    } catch (historyError) {
+      console.warn('[history] ganti audio berhasil, tetapi riwayat gagal disimpan:', historyError.message);
+    }
+    res.set('X-History-Saved', String(Boolean(historyId)));
+    if (historyId) res.set('X-History-Id', historyId);
     res.download(out, 'video-audio-baru.mp4', async () => { await cleanup(videoFile.path, audioFile.path, out); });
   } catch (error) {
     console.error(error);
@@ -448,7 +516,7 @@ app.get('/api/history', requireFirebaseUser, async (req, res) => {
     res.json({ items: snapshot.docs.map((document) => ({ id: document.id, ...document.data() })) });
   } catch (error) {
     console.error('[history] gagal memuat:', error.message);
-    res.status(500).json({ error: 'Riwayat gagal dimuat dari Firestore.' });
+    res.status(500).json({ error: historyFailureMessage(error, 'dimuat') });
   }
 });
 
@@ -523,6 +591,23 @@ app.post('/api/generate-voice', requireFirebaseUser, async (req, res) => {
     }, process.env.GEMINI_TTS_API_KEY);
     const audioData = data?.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData?.data;
     if (!audioData) throw new Error('Gemini tidak mengembalikan data audio.');
+    let historyId = null;
+    try {
+      const historyDoc = await historyCollection(req.firebaseUser.uid).add({
+        type: 'ai-voice',
+        title: 'Suara AI',
+        inputText: text,
+        voice,
+        style,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      historyId = historyDoc.id;
+    } catch (historyError) {
+      console.warn('[history] suara AI berhasil, tetapi riwayat gagal disimpan:', historyError.message);
+    }
+    res.set('X-History-Saved', String(Boolean(historyId)));
+    if (historyId) res.set('X-History-Id', historyId);
     res.set('Content-Type', 'audio/wav');
     res.set('Content-Disposition', 'attachment; filename="suara-ai-gemini.wav"');
     res.send(Buffer.from(audioData, 'base64'));

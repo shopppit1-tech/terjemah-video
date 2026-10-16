@@ -67,7 +67,8 @@ generateBtn.onclick = async () => {
     audioHandoff.href = '/audio.html?generated=1';
     try { await saveAudioForHandoff(blob); } catch { /* unduhan tetap tersedia jika penyimpanan browser tidak tersedia */ }
     result.hidden = false;
-    setStatus('Selesai. Audio siap diputar atau diunduh.');
+    const historyStatus = response.headers.get('X-History-Saved') === 'true' ? 'Riwayat tersimpan.' : 'Riwayat belum tersimpan; aktifkan Cloud Firestore API untuk menyimpan aktivitas.';
+    setStatus(`Selesai. Audio siap diputar atau diunduh. ${historyStatus}`);
   } catch (error) {
     setStatus(error.message, true);
   } finally {

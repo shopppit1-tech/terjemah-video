@@ -216,7 +216,8 @@ replaceBtn.onclick = async () => {
     link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     const completion = speedMode.value === 'manual' ? `Video diunduh dengan kecepatan audio ${Number(manualSpeedSlider.value).toFixed(2)}×.` : speedMode.value === 'auto' ? 'Kecepatan audio disesuaikan otomatis dengan video.' : 'Kecepatan asli audio dipertahankan.';
-    setStatus(`Selesai. ${completion}`);
+    const historyStatus = response.headers.get('X-History-Saved') === 'true' ? 'Riwayat tersimpan.' : 'Riwayat belum tersimpan; aktifkan Cloud Firestore API untuk menyimpan aktivitas.';
+    setStatus(`Selesai. ${completion} ${historyStatus}`);
   } catch (error) {
     setStatus(error.message, true);
   } finally {

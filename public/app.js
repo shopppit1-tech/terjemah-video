@@ -153,7 +153,7 @@ async function transcribeCurrentFile() {
     syncCaption(); drawSegments();
     setStatus(data.historySaved
       ? `${state.segments.length} segmen siap diedit. Riwayat tersimpan.`
-      : `${state.segments.length} segmen siap diedit, tetapi riwayat belum tersimpan.`, !data.historySaved);
+      : `${state.segments.length} segmen siap diedit. ${data.historyError || 'Riwayat belum tersimpan.'}`, !data.historySaved);
   } catch (error) {
     if (error.name !== 'AbortError' && state.file === selectedFile) setStatus(error.message, true);
   } finally {
