@@ -164,3 +164,43 @@ $('#exportBtn').onclick = async () => {
   finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = originalButton; }
 };
 applyPreviewStyle(); syncCaption();
+
+const pullIndicator = $('#pullIndicator');
+const editorCard = $('.editor-card');
+const pullThreshold = 86;
+let pullStartX = null;
+let pullStartY = null;
+let pullDistance = 0;
+function resetPullGesture() {
+  pullStartX = null;
+  pullStartY = null;
+  pullDistance = 0;
+  pullIndicator.classList.remove('visible');
+}
+document.addEventListener('touchstart', (event) => {
+  if (event.touches.length !== 1) return;
+  const target = event.target;
+  if (target.closest('button,input,textarea,select,video,label,.segment-list,.templates,.mini-templates,[contenteditable="true"]')) return;
+  if (window.scrollY > 0 || editorCard.scrollTop > 0) return;
+  pullStartX = event.touches[0].clientX;
+  pullStartY = event.touches[0].clientY;
+}, { passive: true });
+document.addEventListener('touchmove', (event) => {
+  if (pullStartY === null || event.touches.length !== 1) return;
+  const deltaX = event.touches[0].clientX - pullStartX;
+  const deltaY = event.touches[0].clientY - pullStartY;
+  if (deltaY <= 0 || Math.abs(deltaX) > deltaY) { resetPullGesture(); return; }
+  if (window.scrollY > 0 || editorCard.scrollTop > 0) { resetPullGesture(); return; }
+  pullDistance = deltaY;
+  if (deltaY > 12) {
+    event.preventDefault();
+    pullIndicator.textContent = deltaY >= pullThreshold ? 'Lepaskan untuk menyegarkan' : 'Tarik ke bawah untuk menyegarkan';
+    pullIndicator.classList.add('visible');
+  }
+}, { passive: false });
+document.addEventListener('touchend', () => {
+  const shouldRefresh = pullDistance >= pullThreshold;
+  resetPullGesture();
+  if (shouldRefresh) window.location.reload();
+});
+document.addEventListener('touchcancel', resetPullGesture);
