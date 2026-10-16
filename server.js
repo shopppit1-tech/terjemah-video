@@ -12,6 +12,9 @@ const exec = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const GEMINI_KEY_COOLDOWN_MS = 5 * 60 * 1000;
+let nextGeminiKeyIndex = 0;
+const geminiKeyCooldowns = new Map();
 const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limits: { fileSize: 500 * 1024 * 1024 } });
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(process.cwd(), 'public')));
@@ -23,25 +26,74 @@ function requireKey(res) {
   }
   return true;
 }
+function configuredGeminiKeys() {
+  return [...new Set([process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2].filter(Boolean))];
+}
+function geminiKeysInRotation() {
+  const keys = configuredGeminiKeys();
+  if (!keys.length) return [];
+  const start = nextGeminiKeyIndex % keys.length;
+  const rotated = [...keys.slice(start), ...keys.slice(0, start)];
+  const now = Date.now();
+  return rotated.filter(key => (geminiKeyCooldowns.get(key) || 0) <= now);
+}
+function rotateGeminiKeyAfter(apiKey) {
+  const keys = configuredGeminiKeys();
+  const index = keys.indexOf(apiKey);
+  if (index >= 0) nextGeminiKeyIndex = (index + 1) % keys.length;
+}
+function geminiKeyWaitMessage() {
+  const keys = configuredGeminiKeys();
+  const earliest = Math.min(...keys.map(key => geminiKeyCooldowns.get(key) || Date.now()));
+  const seconds = Math.max(1, Math.ceil((earliest - Date.now()) / 1000));
+  return `Semua Gemini API key sedang dibatasi kuota. Coba lagi sekitar ${seconds} detik.`;
+}
+function isGeminiQuotaError(status, message) {
+  return status === 429 || /\b429\b|quota|resource exhausted|rate.?limit|too many requests/i.test(message || '');
+}
+function geminiQuotaCooldownMs(data, message) {
+  const retryDelay = data?.error?.details?.find(detail => String(detail['@type'] || '').includes('RetryInfo'))?.retryDelay;
+  const seconds = String(retryDelay || message || '').match(/(\d+(?:\.\d+)?)s\b/i)?.[1];
+  if (seconds) return Math.max(1000, Math.ceil(Number(seconds) * 1000));
+  if (/per[ _-]?day|daily/i.test(message || '')) return 24 * 60 * 60 * 1000;
+  return GEMINI_KEY_COOLDOWN_MS;
+}
+function coolDownGeminiKey(apiKey, data, message) {
+  geminiKeyCooldowns.set(apiKey, Date.now() + geminiQuotaCooldownMs(data, message));
+  rotateGeminiKeyAfter(apiKey);
+}
 async function geminiRequest(model, body, fixedKey = null) {
   const models = [model || 'gemini-3.8-flash'];
-  const baseKeys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2].filter(Boolean);
-  const keys = fixedKey ? [fixedKey] : [...baseKeys, ...baseKeys];
+  const keys = fixedKey ? [fixedKey] : geminiKeysInRotation();
+  if (!keys.length) throw new Error(geminiKeyWaitMessage());
   let lastError;
   for (const apiKey of keys) {
+    let keyQuotaExhausted = false;
     for (const activeModel of models) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body)
         });
         const data = await r.json().catch(() => ({}));
-        if (r.ok) return data;
+        if (r.ok) {
+          if (!fixedKey) rotateGeminiKeyAfter(apiKey);
+          return data;
+        }
         lastError = new Error(data?.error?.message || `Gemini API error ${r.status}`);
-        const retryable = /high demand|overloaded|temporarily unavailable|unavailable|quota|rate limit|resource exhausted|too many requests/i.test(lastError.message) || [429, 500, 502, 503, 504].includes(r.status);
+        lastError.status = r.status;
+        lastError.responseData = data;
+        if (isGeminiQuotaError(r.status, lastError.message)) {
+          if (!fixedKey) coolDownGeminiKey(apiKey, data, lastError.message);
+          keyQuotaExhausted = true;
+          break;
+        }
+        const retryable = /high demand|overloaded|temporarily unavailable|unavailable/i.test(lastError.message) || [500, 502, 503, 504].includes(r.status);
         if (!retryable) break;
         await new Promise(resolve => setTimeout(resolve, 1200 * (attempt + 1)));
       }
+      if (keyQuotaExhausted) break;
     }
+    if (!fixedKey && !keyQuotaExhausted) rotateGeminiKeyAfter(apiKey);
   }
   throw lastError || new Error('Gemini API tidak merespons.');
 }
@@ -112,8 +164,8 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
   try {
     await exec('ffmpeg', ['-y', '-i', req.file.path, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audio]);
     const prompt = `Transkripsikan audio ini menjadi subtitle. Kembalikan JSON valid saja dengan bentuk {"segments":[{"start":0.0,"end":2.5,"text":"..."}]}. Gunakan waktu dalam detik, urutkan dari awal sampai akhir, pecah kalimat menjadi segmen pendek yang nyaman dibaca, dan tulis teks persis sesuai ucapan dalam bahasa aslinya. Jangan tambahkan markdown atau komentar.`;
-    const baseKeys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2].filter(Boolean);
-    const keys = [...baseKeys, ...baseKeys];
+    const keys = geminiKeysInRotation();
+    if (!keys.length) throw new Error(geminiKeyWaitMessage());
     let lastError;
     for (const apiKey of keys) {
       try {
@@ -121,9 +173,14 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
         const data = await geminiRequest(MODEL, { contents: [{ parts: [{ text: prompt }, { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'audio/mpeg' } }] }], generationConfig: { responseMimeType: 'application/json' } }, apiKey);
         const parsed = jsonPart(responseText(data));
         const segments = (parsed?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || (Number(s.start) + 2), text: String(s.text || '').trim() })).filter(s => s.text);
+        rotateGeminiKeyAfter(apiKey);
         res.json({ text: segments.map(s => s.text).join(' '), segments });
         return;
-      } catch (error) { lastError = error; }
+      } catch (error) {
+        lastError = error;
+        if (isGeminiQuotaError(error.status, error.message)) coolDownGeminiKey(apiKey, error.responseData, error.message);
+        else rotateGeminiKeyAfter(apiKey);
+      }
     }
     throw lastError || new Error('Semua Gemini API key gagal memproses audio.');
   } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
