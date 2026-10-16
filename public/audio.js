@@ -14,9 +14,25 @@ const replaceBtn = $('#replaceBtn');
 const status = $('#status');
 const progress = $('#progress');
 const progressFill = $('#progressFill');
+const resultActions = $('#resultActions');
 let videoUrl = null;
 let audioUrl = null;
 let busy = false;
+
+function saveVideoForHandoff(blob) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('videoteks-audio', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('generated');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction('generated', 'readwrite');
+      transaction.objectStore('generated').put({ blob, name: 'video-audio-baru.mp4', createdAt: Date.now() }, 'video-latest');
+      transaction.oncomplete = () => { database.close(); resolve(); };
+      transaction.onerror = () => { database.close(); reject(transaction.error); };
+    };
+  });
+}
 
 function loadGeneratedAudio() {
   if (new URLSearchParams(location.search).get('generated') !== '1') return;
@@ -187,6 +203,8 @@ replaceBtn.onclick = async () => {
     showProgress(100);
     replaceBtn.textContent = 'Mengunduh... 100%';
     setStatus('Unduhan siap. Menyimpan video baru...');
+    try { await saveVideoForHandoff(blob); } catch { /* unduhan tetap tersedia jika penyimpanan browser tidak tersedia */ }
+    resultActions.hidden = false;
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;

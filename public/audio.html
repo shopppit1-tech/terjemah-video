@@ -49,6 +49,7 @@ h1{margin:0;font-size:clamp(25px,7vw,34px);line-height:1.08;letter-spacing:-.8px
 .progress{height:7px;margin-top:9px;overflow:hidden;border-radius:999px;background:#111a24}
 .progress[hidden]{display:none}
 .progress-fill{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#36a9ff,#a855f7);transition:width .12s linear}
+.result-actions{margin-top:10px}.result-actions[hidden]{display:none}.result-actions a{display:block;padding:10px;border:1px solid #a76cff55;border-radius:10px;background:#8b5cf633;color:#fff;text-align:center;text-decoration:none;font-size:11px;font-weight:750}
 </style>
 </head>
 <body>
@@ -99,6 +100,7 @@ h1{margin:0;font-size:clamp(25px,7vw,34px);line-height:1.08;letter-spacing:-.8px
     <p class="note">Suara asli video akan dilepas. Pilih Otomatis untuk menyamakan durasi, Manual untuk mengatur kecepatan sendiri, atau Kecepatan asli. Hasil unduhan tetap sepanjang video.</p>
     <button id="replaceBtn" class="btn" type="button" disabled>Ganti suara &amp; unduh</button>
     <div id="progress" class="progress" role="progressbar" aria-label="Progres unduhan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div id="progressFill" class="progress-fill"></div></div>
+    <div id="resultActions" class="result-actions" hidden><a href="/?generated=1">Lanjut ke Subtitle Video</a></div>
     <div id="status" class="status" aria-live="polite">Pilih video dan file audio untuk mulai.</div>
   </section>
 </main>

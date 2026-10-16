@@ -123,6 +123,31 @@ async function transcribeCurrentFile() {
   }
 }
 $('#transcribeBtn').onclick = transcribeCurrentFile;
+
+function loadGeneratedVideo() {
+  if (new URLSearchParams(location.search).get('generated') !== '1') return;
+  const request = indexedDB.open('videoteks-audio', 1);
+  request.onupgradeneeded = () => request.result.createObjectStore('generated');
+  request.onerror = () => setStatus('Video hasil Ganti Audio tidak dapat dibaca.', true);
+  request.onsuccess = () => {
+    const database = request.result;
+    const getRequest = database.transaction('generated', 'readonly').objectStore('generated').get('video-latest');
+    getRequest.onsuccess = () => {
+      const record = getRequest.result;
+      database.close();
+      if (!record?.blob) { setStatus('Video hasil Ganti Audio tidak ditemukan.', true); return; }
+      try {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([record.blob], record.name || 'video-audio-baru.mp4', { type: record.blob.type || 'video/mp4' }));
+        fileInput.files = transfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+      } catch { setStatus('Video tersimpan, tetapi browser tidak dapat memasukkannya otomatis.', true); }
+    };
+    getRequest.onerror = () => { database.close(); setStatus('Video hasil Ganti Audio tidak dapat dibaca.', true); };
+  };
+}
+
+loadGeneratedVideo();
 $('#exportBtn').onclick = async () => {
   if (!state.file || !state.segments.length) return setStatus('Buat subtitle terlebih dahulu.', true);
   const form = new FormData(); form.append('video', state.file); form.append('segments', JSON.stringify(state.segments));
