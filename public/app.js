@@ -1,4 +1,10 @@
 const state = { file: null, segments: [], color: '#ef4444', template: 'pill', fontSize: 28, position: 'bottom', fontFamily: 'DejaVu Sans', outputFormat: 'short' };
+const previewFontStacks = {
+  'DejaVu Sans': 'system-ui, -apple-system, "Segoe UI", sans-serif',
+  'DejaVu Serif': 'Georgia, "Times New Roman", serif',
+  'DejaVu Sans Mono': '"Courier New", Courier, monospace',
+  'Liberation Sans': 'Arial, Helvetica, sans-serif'
+};
 const $ = (s) => document.querySelector(s);
 const video = $('#video');
 const fileInput = $('#fileInput');
@@ -10,7 +16,9 @@ function fmt(s) { return `${String(Math.floor(s / 60)).padStart(2, '0')}:${Strin
 function setStatus(text, error = false) { status.textContent = text; status.className = `status ${error ? 'error' : ''}`; }
 function setBusy(active, text = 'Sedang membuat teks otomatis...') { const overlay = $('#busyOverlay'); const button = $('#transcribeBtn'); if (overlay) overlay.classList.toggle('show', active); if (button) { button.disabled = active; button.style.opacity = active ? '.65' : '1'; button.textContent = active ? '⏳ Sedang bekerja...' : '▣ Buat Teks Otomatis'; } const title = $('#busyTitle'); if (title) title.textContent = text; }
 function syncCaption() {
-  preview.textContent = caption.value || '';
+  const hasCaption = Boolean(caption.value.trim());
+  preview.textContent = hasCaption ? caption.value : 'Contoh subtitle';
+  preview.style.opacity = hasCaption ? '1' : '.62';
   const count = $('#charCount');
   if (count) count.textContent = `${caption.value.length}/120`;
 }
@@ -18,7 +26,7 @@ function esc(value) { return String(value).replace(/[&<>]/g, (c) => ({ '&': '&am
 function applyPreviewStyle() {
   preview.className = `subtitle ${state.template}`;
   preview.style.fontSize = `${state.fontSize}px`;
-  preview.style.fontFamily = state.fontFamily;
+  preview.style.fontFamily = previewFontStacks[state.fontFamily] || previewFontStacks['DejaVu Sans'];
   preview.style.color = state.color === 'gradient' ? '#fff' : state.color;
   preview.style.background = state.template === 'gradient' || state.color === 'gradient'
     ? 'linear-gradient(90deg,#06b6d4,#8b5cf6,#ec4899)'
@@ -63,8 +71,7 @@ document.querySelectorAll('.mini').forEach((button) => button.onclick = () => {
 $('#fontSize').oninput = (e) => { state.fontSize = Number(e.target.value); $('#fontSizeValue').textContent = `${state.fontSize}px`; applyPreviewStyle(); };
 $('#position').onchange = (e) => { state.position = e.target.value; applyPreviewStyle(); };
 $('#fontFamily').onchange = (e) => { state.fontFamily = e.target.value; applyPreviewStyle(); };
-$('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; $('#settingsPanel').classList.remove('show'); setStatus(e.target.value === 'auto' ? 'Kanvas mengikuti rasio video asli.' : `Format ${e.target.options[e.target.selectedIndex].text} dipilih.`); };
-$('#settingsBtn').onclick = () => $('#settingsPanel').classList.toggle('show');
+$('#outputFormat').onchange = (e) => { state.outputFormat = e.target.value; setStatus(e.target.value === 'auto' ? 'Kanvas mengikuti rasio video asli.' : `Format ${e.target.options[e.target.selectedIndex].text} dipilih.`); };
 
 $('#transcribeBtn').onclick = async () => {
   if (!state.file) return setStatus('Pilih video terlebih dahulu.', true);
