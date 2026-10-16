@@ -72,40 +72,50 @@ function coolDownGeminiKey(apiKey, data, message) {
   geminiKeyCooldowns.set(apiKey, Date.now() + geminiQuotaCooldownMs(data, message));
   rotateGeminiKeyAfter(apiKey);
 }
+const GEMINI_RETRY_TIMEOUT_MS = 2 * 60 * 1000;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function geminiRequest(model, body, fixedKey = null) {
   const models = [model || 'gemini-3.8-flash'];
-  const keys = fixedKey ? [fixedKey] : geminiKeysInRotation();
-  if (!keys.length) throw new Error(geminiKeyWaitMessage());
+  const deadline = Date.now() + GEMINI_RETRY_TIMEOUT_MS;
   let lastError;
-  for (const apiKey of keys) {
-    let keyQuotaExhausted = false;
-    for (const activeModel of models) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body)
-        });
-        const data = await r.json().catch(() => ({}));
-        if (r.ok) {
-          if (!fixedKey) rotateGeminiKeyAfter(apiKey);
-          return data;
-        }
-        lastError = new Error(data?.error?.message || `Gemini API error ${r.status}`);
-        lastError.status = r.status;
-        lastError.responseData = data;
-        if (isGeminiQuotaError(r.status, lastError.message)) {
-          if (!fixedKey) coolDownGeminiKey(apiKey, data, lastError.message);
-          keyQuotaExhausted = true;
-          break;
-        }
-        const retryable = /high demand|overloaded|temporarily unavailable|unavailable/i.test(lastError.message) || [500, 502, 503, 504].includes(r.status);
-        if (!retryable) break;
-        await new Promise(resolve => setTimeout(resolve, 1200 * (attempt + 1)));
-      }
-      if (keyQuotaExhausted) break;
+  while (Date.now() < deadline) {
+    const keys = fixedKey ? [fixedKey] : geminiKeysInRotation();
+    if (!keys.length) {
+      await sleep(Math.min(2000, Math.max(250, Math.min(...configuredGeminiKeys().map(key => (geminiKeyCooldowns.get(key) || Date.now()) - Date.now()).filter(wait => wait > 0), 2000))));
+      continue;
     }
-    if (!fixedKey && !keyQuotaExhausted) rotateGeminiKeyAfter(apiKey);
+    for (const apiKey of keys) {
+      let keyQuotaExhausted = false;
+      for (const activeModel of models) {
+        for (let attempt = 0; attempt < 2 && Date.now() < deadline; attempt += 1) {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body)
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok) {
+            if (!fixedKey) rotateGeminiKeyAfter(apiKey);
+            return data;
+          }
+          lastError = new Error(data?.error?.message || `Gemini API error ${r.status}`);
+          lastError.status = r.status;
+          lastError.responseData = data;
+          if (isGeminiQuotaError(r.status, lastError.message)) {
+            if (!fixedKey) coolDownGeminiKey(apiKey, data, lastError.message);
+            keyQuotaExhausted = true;
+            break;
+          }
+          const retryable = /high demand|overloaded|temporarily unavailable|unavailable/i.test(lastError.message) || [500, 502, 503, 504].includes(r.status);
+          if (!retryable) throw lastError;
+          await sleep(1200 * (attempt + 1));
+        }
+        if (keyQuotaExhausted || Date.now() >= deadline) break;
+      }
+      if (!fixedKey) rotateGeminiKeyAfter(apiKey);
+      if (Date.now() >= deadline) break;
+    }
+    if (Date.now() < deadline) await sleep(500);
   }
-  throw lastError || new Error('Gemini API tidak merespons.');
+  throw lastError || new Error(geminiKeyWaitMessage());
 }
 async function uploadToGemini(filePath, mimeType, apiKey) {
   const stat = await fs.stat(filePath);
