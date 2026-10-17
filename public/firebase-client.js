@@ -18,6 +18,15 @@ const firebaseConfig = {
   appId: '1:769830193670:web:d89db61d26dff4c81fd187'
 };
 
+const APP_BASE_URL = new URL('./', import.meta.url);
+const RENDER_API_BASE_URL = 'https://terjemah-video.onrender.com/';
+function appUrl(path) { return new URL(path, APP_BASE_URL).href; }
+function loginUrl(next) {
+  const url = new URL('index.html', APP_BASE_URL);
+  url.searchParams.set('next', next);
+  return url.href;
+}
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 const persistenceReady = setPersistence(auth, browserLocalPersistence);
@@ -43,8 +52,8 @@ function setProfileMenuOpen(button, menu, open) {
 export async function requireLogin() {
   const user = await waitForUser();
   if (!user) {
-    const next = `${location.pathname}${location.search}`;
-    location.replace(`/?next=${encodeURIComponent(next)}`);
+    const next = `${location.pathname}${location.search}${location.hash}`;
+    location.replace(loginUrl(next));
     return new Promise(() => {});
   }
 
@@ -78,7 +87,7 @@ export async function requireLogin() {
       try {
         await signOut(auth);
         document.body.classList.add('page-loading');
-        location.replace('/');
+        location.replace(appUrl('index.html'));
       } catch {
         button.disabled = false;
       }
@@ -95,7 +104,10 @@ export async function authenticatedFetch(url, options = {}) {
   }
   const headers = new Headers(options.headers || {});
   headers.set('Authorization', `Bearer ${await user.getIdToken()}`);
-  return fetch(url, { ...options, headers });
+  const endpoint = /^https?:\/\//i.test(String(url))
+    ? String(url)
+    : new URL(String(url).replace(/^\/+/, ''), RENDER_API_BASE_URL).href;
+  return fetch(endpoint, { ...options, headers });
 }
 
 export async function signInWithGoogle() {

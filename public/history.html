@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#101822">
-  <link rel="stylesheet" href="/auth-shell.css">
-  <script src="/page-navigation.js" defer></script>
+  <link rel="stylesheet" href="auth-shell.css">
+  <script src="page-navigation.js" defer></script>
   <script>document.documentElement.classList.add('auth-pending')</script>
   <title>Riwayat — VideoTeks</title>
 </head>
 <body style="margin:0;background:#0c141d">
-  <header class="auth-bar"><div class="auth-bar__actions"><a href="/app.html">Kembali</a><div class="profile-wrap"><button class="profile-button" type="button" data-profile-trigger aria-label="Buka menu profil" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 20c.7-3.8 3-5.7 6.5-5.7s5.8 1.9 6.5 5.7"></path></svg></button><div id="profileMenu" class="profile-menu" data-profile-menu role="menu" hidden><p class="profile-email" data-account-email>Memuat email…</p><button class="profile-menu__signout" type="button" data-sign-out role="menuitem">Keluar</button></div></div></div></header>
+  <header class="auth-bar"><div class="auth-bar__actions"><a href="app.html">Kembali</a><div class="profile-wrap"><button class="profile-button" type="button" data-profile-trigger aria-label="Buka menu profil" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 20c.7-3.8 3-5.7 6.5-5.7s5.8 1.9 6.5 5.7"></path></svg></button><div id="profileMenu" class="profile-menu" data-profile-menu role="menu" hidden><p class="profile-email" data-account-email>Memuat email…</p><button class="profile-menu__signout" type="button" data-sign-out role="menuitem">Keluar</button></div></div></div></header>
   <main class="history-app">
     <h1>Riwayat transkripsi</h1>
     <p class="history-note">Teks dan segmen tersimpan per akun. File video tidak disimpan. Hapus item yang tidak dibutuhkan.</p>
     <div id="historyStatus" class="history-status" role="status" aria-live="polite">Memuat riwayat…</div>
     <section id="historyList" class="history-list" aria-label="Daftar riwayat" hidden></section>
   </main>
-  <script type="module" src="/history.js"></script>
+  <script type="module" src="history.js"></script>
 </body>
 </html>

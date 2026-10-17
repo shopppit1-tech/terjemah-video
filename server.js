@@ -37,6 +37,18 @@ let nextGeminiKeyIndex = 0;
 const geminiKeyCooldowns = new Map();
 const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limits: { fileSize: 500 * 1024 * 1024 } });
 app.use(express.json({ limit: '2mb' }));
+const allowedOrigins = new Set(['https://shopppit1-tech.github.io', 'https://terjemah-video.onrender.com']);
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (!origin || !allowedOrigins.has(origin)) return next();
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Expose-Headers', 'X-History-Saved, Content-Disposition');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  return next();
+});
 app.use(express.static(path.join(process.cwd(), 'public')));
 
 async function requireFirebaseUser(req, res, next) {

@@ -2,8 +2,14 @@ import { auth, signInWithGoogle, waitForUser } from './firebase-client.js';
 
 const button = document.querySelector('#googleSignIn');
 const status = document.querySelector('#loginStatus');
-const requestedNext = new URLSearchParams(location.search).get('next') || '/app.html';
-const nextUrl = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/app.html';
+const appBase = new URL('./', import.meta.url);
+const fallbackNext = new URL('app.html', appBase);
+const requestedNext = new URLSearchParams(location.search).get('next') || fallbackNext.href;
+let nextUrl = fallbackNext.href;
+try {
+  const candidate = new URL(requestedNext, appBase);
+  if (candidate.origin === location.origin && candidate.pathname.startsWith(appBase.pathname)) nextUrl = candidate.href;
+} catch { /* gunakan halaman subtitle sebagai tujuan aman */ }
 
 function setStatus(message, error = false) {
   status.textContent = message;
