@@ -13,3 +13,9 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_TOKEN_ENCRYPTION_KEY
+        sync: false

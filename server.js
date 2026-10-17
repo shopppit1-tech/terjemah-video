@@ -37,14 +37,14 @@ let nextGeminiKeyIndex = 0;
 const geminiKeyCooldowns = new Map();
 const upload = multer({ dest: path.join(os.tmpdir(), 'videoteks-uploads'), limits: { fileSize: 500 * 1024 * 1024 } });
 app.use(express.json({ limit: '2mb' }));
-const allowedOrigins = new Set(['https://shopppit1-tech.github.io', 'https://terjemah-video.onrender.com']);
+const allowedOrigins = new Set(['https://shopppit1-tech.github.io', 'https://terjemah-video.onrender.com', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 app.use((req, res, next) => {
   const origin = req.get('origin');
   if (!origin || !allowedOrigins.has(origin)) return next();
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With');
   res.setHeader('Access-Control-Expose-Headers', 'X-History-Saved, Content-Disposition');
   if (req.method === 'OPTIONS') return res.status(204).end();
   return next();
@@ -67,6 +67,49 @@ async function requireFirebaseUser(req, res, next) {
 
 function historyCollection(uid) {
   return firebaseDb.collection('users').doc(uid).collection('history');
+}
+
+function youtubeIntegrationRef(uid) {
+  return firebaseDb.collection('users').doc(uid).collection('integrations').doc('youtube');
+}
+
+function youtubeOAuthConfig() {
+  const clientId = process.env.YOUTUBE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+  const encryptionKey = process.env.YOUTUBE_TOKEN_ENCRYPTION_KEY || '';
+  if (!clientId || !clientSecret || !/^[a-f\d]{64}$/i.test(encryptionKey)) return null;
+  return { clientId, clientSecret, encryptionKey: Buffer.from(encryptionKey, 'hex') };
+}
+
+function encryptYoutubeRefreshToken(token, encryptionKey) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return `v1:${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${encrypted.toString('base64')}`;
+}
+
+function decryptYoutubeRefreshToken(value, encryptionKey) {
+  const [version, ivValue, tagValue, encryptedValue] = String(value || '').split(':');
+  if (version !== 'v1' || !ivValue || !tagValue || !encryptedValue) throw new Error('Kredensial YouTube tidak valid.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey, Buffer.from(ivValue, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagValue, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(encryptedValue, 'base64')), decipher.final()]).toString('utf8');
+}
+
+async function youtubeTokenRequest(parameters) {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(parameters),
+    signal: AbortSignal.timeout(15000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || 'Permintaan token YouTube gagal.');
+    error.oauthError = data.error;
+    throw error;
+  }
+  return data;
 }
 
 function historyFailureMessage(error, action) {
@@ -579,6 +622,118 @@ app.delete('/api/history/:id', requireFirebaseUser, async (req, res) => {
   } catch (error) {
     console.error('[history] gagal menghapus:', error.message);
     res.status(500).json({ error: 'Riwayat gagal dihapus.' });
+  }
+});
+
+app.get('/api/youtube/status', requireFirebaseUser, async (req, res) => {
+  const config = youtubeOAuthConfig();
+  if (!config) return res.status(503).json({ error: 'Integrasi YouTube belum dikonfigurasi di server.' });
+  try {
+    const snapshot = await youtubeIntegrationRef(req.firebaseUser.uid).get();
+    res.json({ configured: true, connected: Boolean(snapshot.data()?.refreshTokenEncrypted), clientId: config.clientId });
+  } catch (error) {
+    console.error('[youtube] gagal membaca status koneksi:', error.message);
+    res.status(500).json({ error: 'Status koneksi YouTube gagal dimuat.' });
+  }
+});
+
+app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
+  const config = youtubeOAuthConfig();
+  if (!config) return res.status(503).json({ error: 'Integrasi YouTube belum dikonfigurasi di server.' });
+  const origin = req.get('origin');
+  if (!origin || !allowedOrigins.has(origin) || req.get('X-Requested-With') !== 'XmlHttpRequest') {
+    return res.status(403).json({ error: 'Permintaan OAuth YouTube tidak valid.' });
+  }
+  const code = typeof req.body?.code === 'string' ? req.body.code : '';
+  if (!code || code.length > 4096) return res.status(400).json({ error: 'Kode otorisasi YouTube tidak valid.' });
+  try {
+    const tokens = await youtubeTokenRequest({
+      code,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      redirect_uri: origin,
+      grant_type: 'authorization_code'
+    });
+    const grantedScopes = String(tokens.scope || '').split(/\s+/);
+    if (!tokens.access_token || (tokens.scope && !grantedScopes.includes('https://www.googleapis.com/auth/youtube.upload'))) {
+      return res.status(403).json({ error: 'Google tidak memberikan izin unggah YouTube yang diperlukan.' });
+    }
+    const ref = youtubeIntegrationRef(req.firebaseUser.uid);
+    const existing = await ref.get();
+    let refreshToken = tokens.refresh_token;
+    if (!refreshToken && existing.data()?.refreshTokenEncrypted) {
+      refreshToken = decryptYoutubeRefreshToken(existing.data().refreshTokenEncrypted, config.encryptionKey);
+    }
+    if (!refreshToken) {
+      return res.status(409).json({ error: 'Google belum memberikan izin akses jangka panjang. Lepas akses VideoTeks di pengaturan Akun Google lalu hubungkan kembali.' });
+    }
+    await ref.set({
+      refreshTokenEncrypted: encryptYoutubeRefreshToken(refreshToken, config.encryptionKey),
+      scopes: grantedScopes,
+      connectedAt: existing.data()?.connectedAt || Date.now(),
+      updatedAt: Date.now()
+    }, { merge: true });
+    res.json({ connected: true, accessToken: tokens.access_token });
+  } catch (error) {
+    console.error('[youtube] gagal menyambungkan akun:', error.oauthError || error.message);
+    res.status(502).json({ error: 'Akun YouTube gagal disambungkan. Coba ulangi persetujuan akun.' });
+  }
+});
+
+app.get('/api/youtube/access-token', requireFirebaseUser, async (req, res) => {
+  const config = youtubeOAuthConfig();
+  if (!config) return res.status(503).json({ error: 'Integrasi YouTube belum dikonfigurasi di server.' });
+  const ref = youtubeIntegrationRef(req.firebaseUser.uid);
+  try {
+    const snapshot = await ref.get();
+    const encryptedToken = snapshot.data()?.refreshTokenEncrypted;
+    if (!encryptedToken) return res.status(404).json({ error: 'Akun YouTube belum terhubung.', reconnect: true });
+    const refreshToken = decryptYoutubeRefreshToken(encryptedToken, config.encryptionKey);
+    const tokens = await youtubeTokenRequest({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    });
+    if (!tokens.access_token) throw new Error('Google tidak mengembalikan access token.');
+    const update = { lastRefreshedAt: Date.now() };
+    if (tokens.refresh_token) update.refreshTokenEncrypted = encryptYoutubeRefreshToken(tokens.refresh_token, config.encryptionKey);
+    await ref.set(update, { merge: true });
+    res.set('Cache-Control', 'no-store');
+    res.json({ accessToken: tokens.access_token, expiresIn: tokens.expires_in || 3600 });
+  } catch (error) {
+    if (error.oauthError === 'invalid_grant') {
+      await ref.delete().catch(() => {});
+      return res.status(401).json({ error: 'Izin YouTube sudah dicabut atau kedaluwarsa. Hubungkan akun kembali.', reconnect: true });
+    }
+    console.error('[youtube] gagal memperbarui token akses:', error.oauthError || error.message);
+    res.status(502).json({ error: 'Akses YouTube sementara gagal diperbarui. Coba lagi.' });
+  }
+});
+
+app.delete('/api/youtube/connection', requireFirebaseUser, async (req, res) => {
+  const ref = youtubeIntegrationRef(req.firebaseUser.uid);
+  try {
+    const snapshot = await ref.get();
+    const config = youtubeOAuthConfig();
+    const encryptedToken = snapshot.data()?.refreshTokenEncrypted;
+    if (config && encryptedToken) {
+      try {
+        const refreshToken = decryptYoutubeRefreshToken(encryptedToken, config.encryptionKey);
+        await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          signal: AbortSignal.timeout(10000)
+        });
+      } catch (error) {
+        console.warn('[youtube] pencabutan izin Google tidak berhasil; kredensial lokal tetap dihapus:', error.message);
+      }
+    }
+    await ref.delete();
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[youtube] gagal menghapus koneksi:', error.message);
+    res.status(500).json({ error: 'Koneksi YouTube gagal dilepas.' });
   }
 });
 
