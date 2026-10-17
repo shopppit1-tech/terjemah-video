@@ -11,6 +11,7 @@ MVP aplikasi untuk membuat subtitle dari suara asli video, menerjemahkannya, mem
 - Ekspor MP4 dengan subtitle tertanam dan audio asli tetap ada.
 - Template warna subtitle: merah, jingga, kuning, hijau, biru, ungu, pink, hitam, putih, gradient.
 - Google Sign-In sebelum membuka fitur, serta riwayat transkripsi per akun yang dapat dihapus.
+- Koneksi YouTube tersimpan per akun VideoTeks dan dipulihkan otomatis saat halaman dibuka kembali.
 
 ## Menjalankan
 
@@ -22,6 +23,7 @@ cp .env.example .env
 # isi GEMINI_API_KEY di .env untuk Subtitle Video
 # isi GEMINI_TTS_API_KEY di .env untuk halaman Suara AI (opsional)
 # isi FIREBASE_SERVICE_ACCOUNT_JSON menggunakan kredensial server Firebase (wajib untuk login/riwayat)
+# isi kredensial OAuth YouTube dan kunci enkripsi token di bawah ini
 npm start
 ```
 
@@ -30,6 +32,12 @@ Buka `http://localhost:3000`. Firebase Web app di frontend menggunakan project I
 Untuk riwayat, buat Firestore Database. Backend menyimpan dokumen di `users/{uid}/history/{historyId}` sehingga endpoint menggunakan UID sesi yang tokennya diverifikasi server. Di Render, buat service account Firebase dengan akses Firestore yang diperlukan dan isi environment variable `FIREBASE_SERVICE_ACCOUNT_JSON` dengan **seluruh JSON service-account**. Jangan commit service-account atau memasukkan private key ke frontend/chat. Jangan membuat Firestore rules `allow read, write: if true`; akses aplikasi dilakukan melalui server Admin SDK dan tiap operasi membatasi koleksi ke UID token yang diverifikasi. File video tidak disimpan; hanya teks, segmen subtitle, dan pengaturan.
 
 API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halaman Suara AI, gunakan nama terpisah `GEMINI_TTS_API_KEY` agar tidak bentrok dengan `GEMINI_API_KEY`. Model default-nya adalah Gemini 3 TTS `gemini-3.8-flash-tts`; model dapat diganti dengan `GEMINI_TTS_MODEL`.
+
+### Koneksi YouTube otomatis
+
+Buat OAuth 2.0 Client ID bertipe **Web application** di Google Cloud Console untuk proyek yang mengaktifkan **YouTube Data API v3**. Tambahkan origin situs VideoTeks (`https://shopppit1-tech.github.io`) dan origin Render (`https://terjemah-video.onrender.com`) ke **Authorized JavaScript origins**. Gunakan pasangan Client ID dan Client Secret dari client yang sama.
+
+Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, serta `YOUTUBE_TOKEN_ENCRYPTION_KEY` pada server. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
 
 ## Deploy ke Render
 
@@ -47,6 +55,9 @@ API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halama
    - `GEMINI_TTS_API_KEY`: API key Gemini khusus halaman Suara AI
    - `GEMINI_TTS_MODEL`: `gemini-3.8-flash-tts`
    - `FIREBASE_SERVICE_ACCOUNT_JSON`: seluruh JSON service-account Firebase sebagai nilai environment (jangan commit file/key tersebut)
+   - `YOUTUBE_CLIENT_ID`: OAuth Web Client ID Google
+   - `YOUTUBE_CLIENT_SECRET`: Client Secret untuk OAuth Web Client yang sama
+   - `YOUTUBE_TOKEN_ENCRYPTION_KEY`: kunci acak 64 karakter heksadesimal dari `openssl rand -hex 32`
 5. Di Firebase Authentication, aktifkan Google Sign-In dan tambahkan domain Render pada Authorized domains. Buat Firestore Database.
 6. Jangan menaruh API key Gemini atau service-account private key di file frontend atau GitHub. Tanpa `FIREBASE_SERVICE_ACCOUNT_JSON`, endpoint aplikasi mengembalikan status konfigurasi belum siap.
 

@@ -1,9 +1,7 @@
-import { requireLogin } from './firebase-client.js';
+import { authenticatedFetch, requireLogin } from './firebase-client.js';
 
-const CLIENT_ID = '104739459438-ojqbhl406868qbgdi1hoeb8bm4qdmbef.apps.googleusercontent.com';
 const UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 const UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status';
-
 await requireLogin();
 
 const $ = (selector) => document.querySelector(selector);
@@ -18,7 +16,7 @@ const statusNode = $('#status');
 const progress = $('#progress');
 const progressFill = $('#progressFill');
 const successLink = $('#successLink');
-let tokenClient = null;
+let codeClient = null;
 let accessToken = null;
 let selectedFile = null;
 let uploading = false;
@@ -30,7 +28,7 @@ function setStatus(message, isError = false) {
 }
 
 function updateControls() {
-  connectButton.disabled = !tokenClient || uploading;
+  connectButton.disabled = !codeClient || uploading;
   disconnectButton.hidden = !accessToken;
   uploadButton.disabled = uploading || !accessToken || !selectedFile || !titleInput.value.trim() || !rightsCheck.checked;
   fileInput.disabled = uploading;
@@ -53,9 +51,9 @@ function parseResponse(text) {
 
 function apiErrorMessage(text, statusCode) {
   const response = parseResponse(text);
-  const message = response?.error?.message || response?.error_description;
+  const message = response?.error || response?.error_description;
   if (message) return message;
-  if (statusCode === 401) return 'Sesi YouTube berakhir. Hubungkan akun kembali, lalu ulangi unggahan.';
+  if (statusCode === 401) return 'Sesi YouTube perlu diperbarui. Hubungkan akun kembali, lalu ulangi unggahan.';
   if (statusCode === 403) return 'Akses unggah ditolak. Pastikan layanan unggah video diaktifkan untuk aplikasi ini.';
   return `Unggahan gagal (HTTP ${statusCode || 'tidak diketahui'}). Coba lagi.`;
 }
@@ -77,59 +75,43 @@ function waitForIdentityLibrary(timeoutMs = 15000) {
   });
 }
 
-function clearAuthorizationTimer() {
-  if (authorizationTimer) clearTimeout(authorizationTimer);
-  authorizationTimer = null;
+async function apiRequest(url, options = {}) {
+  const response = await authenticatedFetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || `Permintaan gagal (HTTP ${response.status}).`);
+    error.status = response.status;
+    error.reconnect = Boolean(data.reconnect);
+    throw error;
+  }
+  return data;
 }
 
-function handleTokenResponse(response) {
-  clearAuthorizationTimer();
-  connectButton.textContent = 'Hubungkan akun';
-  if (response?.error || !response?.access_token) {
-    accessToken = null;
-    $('#accountLabel').textContent = 'Belum terhubung';
-    $('#accountHint').textContent = 'Akses unggah hanya diminta saat Anda memilih untuk menghubungkan akun.';
-    setStatus(response?.error_description || response?.error || 'Persetujuan akun tidak berhasil.', true);
-    updateControls();
-    return;
-  }
-
-  const grantedScopes = String(response.scope || '').split(/\s+/);
-  if (response.scope && !grantedScopes.includes(UPLOAD_SCOPE)) {
-    accessToken = null;
-    setStatus('Izin unggah belum disetujui. Hubungkan kembali dan setujui akses yang diminta.', true);
-    updateControls();
-    return;
-  }
-
-  accessToken = response.access_token;
-  $('#accountLabel').textContent = 'Akun siap untuk sesi ini';
-  $('#accountHint').textContent = 'Token akses hanya disimpan sementara di halaman ini dan tidak disimpan ke server.';
-  setStatus('Akun terhubung. Pilih video dan lengkapi detail unggahan.');
+function setConnected(token) {
+  accessToken = token;
+  $('#accountLabel').textContent = 'Terhubung otomatis';
+  $('#accountHint').textContent = 'Akun YouTube tersimpan dengan aman. VideoTeks akan memulihkan akses saat Anda kembali.';
+  setStatus('Akun YouTube siap. Pilih video dan lengkapi detail unggahan.');
   updateControls();
 }
 
-async function initializeOAuth() {
-  try {
-    const oauth = await waitForIdentityLibrary();
-    tokenClient = oauth.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: UPLOAD_SCOPE,
-      callback: handleTokenResponse,
-      error_callback: (error) => {
-        clearAuthorizationTimer();
-        connectButton.textContent = 'Hubungkan akun';
-        setStatus(error?.message || 'Jendela persetujuan tidak dapat dibuka. Coba lagi.', true);
-        updateControls();
-      }
-    });
-    connectButton.disabled = false;
-    $('#accountHint').textContent = 'Saat dihubungkan, Anda akan diminta menyetujui izin unggah video.';
-    updateControls();
-  } catch (error) {
-    $('#accountHint').textContent = error.message;
-    setStatus(error.message, true);
-  }
+function setDisconnected(message = 'Akun YouTube belum terhubung.') {
+  accessToken = null;
+  $('#accountLabel').textContent = 'Belum terhubung';
+  $('#accountHint').textContent = 'Hubungkan sekali untuk memulihkan akses otomatis saat Anda kembali.';
+  setStatus(message);
+  updateControls();
+}
+
+async function refreshAccessToken() {
+  const data = await apiRequest('/api/youtube/access-token', { method: 'GET' });
+  if (!data.accessToken) throw new Error('Server tidak mengembalikan akses YouTube.');
+  return data.accessToken;
+}
+
+function clearAuthorizationTimer() {
+  if (authorizationTimer) clearTimeout(authorizationTimer);
+  authorizationTimer = null;
 }
 
 function createMultipartBody(file, metadata) {
@@ -170,29 +152,98 @@ function uploadVideo(file, metadata, token) {
   });
 }
 
+async function handleAuthorizationCode(response) {
+  clearAuthorizationTimer();
+  connectButton.textContent = 'Menghubungkan…';
+  if (response?.error || !response?.code) {
+    connectButton.textContent = 'Hubungkan akun';
+    setStatus(response?.error_description || response?.error || 'Persetujuan akun tidak berhasil.', true);
+    updateControls();
+    return;
+  }
+  try {
+    setStatus('Menyimpan koneksi YouTube dengan aman…');
+    const data = await apiRequest('/api/youtube/connect', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XmlHttpRequest'
+      },
+      body: JSON.stringify({ code: response.code })
+    });
+    if (!data.accessToken) throw new Error('Server tidak mengembalikan akses YouTube.');
+    setConnected(data.accessToken);
+  } catch (error) {
+    setDisconnected(error.message || 'Akun YouTube gagal disambungkan.');
+    setStatus(error.message || 'Akun YouTube gagal disambungkan.', true);
+  } finally {
+    connectButton.textContent = 'Hubungkan akun';
+    updateControls();
+  }
+}
+
+async function initializeOAuth() {
+  try {
+    const status = await apiRequest('/api/youtube/status', { method: 'GET' });
+    const oauth = await waitForIdentityLibrary();
+    codeClient = oauth.initCodeClient({
+      client_id: status.clientId,
+      scope: UPLOAD_SCOPE,
+      ux_mode: 'popup',
+      callback: handleAuthorizationCode,
+      error_callback: (error) => {
+        clearAuthorizationTimer();
+        connectButton.textContent = 'Hubungkan akun';
+        setStatus(error?.message || 'Jendela persetujuan tidak dapat dibuka. Coba lagi.', true);
+        updateControls();
+      }
+    });
+    if (status.connected) {
+      $('#accountLabel').textContent = 'Memulihkan koneksi…';
+      $('#accountHint').textContent = 'Mengambil akses YouTube secara otomatis.';
+      try {
+        setConnected(await refreshAccessToken());
+      } catch (error) {
+        setDisconnected(error.message || 'Hubungkan kembali akun YouTube untuk melanjutkan.');
+        if (error.reconnect) setStatus(error.message, true);
+      }
+    } else {
+      setDisconnected('Hubungkan akun YouTube sekali untuk mengaktifkan akses otomatis.');
+    }
+    updateControls();
+  } catch (error) {
+    $('#accountLabel').textContent = 'Koneksi belum tersedia';
+    $('#accountHint').textContent = error.message;
+    setStatus(error.message, true);
+    updateControls();
+  }
+}
+
 connectButton.addEventListener('click', () => {
-  if (!tokenClient || uploading) return;
+  if (!codeClient || uploading) return;
   connectButton.disabled = true;
   connectButton.textContent = 'Menunggu…';
   setStatus('Menunggu persetujuan akses unggah…');
-  tokenClient.requestAccessToken({ prompt: 'select_account' });
+  codeClient.requestCode({ prompt: 'consent select_account' });
   clearAuthorizationTimer();
   authorizationTimer = setTimeout(() => {
     connectButton.textContent = 'Hubungkan akun';
     updateControls();
     if (!accessToken) setStatus('Jika jendela persetujuan ditutup, tekan Hubungkan akun untuk mencoba lagi.');
-  }, 15000);
+  }, 30000);
 });
 
-disconnectButton.addEventListener('click', () => {
-  if (accessToken && window.google?.accounts?.oauth2?.revoke) {
-    window.google.accounts.oauth2.revoke(accessToken, () => {});
+disconnectButton.addEventListener('click', async () => {
+  disconnectButton.disabled = true;
+  try {
+    await apiRequest('/api/youtube/connection', { method: 'DELETE' });
+    setDisconnected('Koneksi YouTube telah dilepas.');
+  } catch (error) {
+    setStatus(error.message || 'Koneksi YouTube gagal dilepas.', true);
+  } finally {
+    disconnectButton.disabled = false;
+    updateControls();
   }
-  accessToken = null;
-  $('#accountLabel').textContent = 'Belum terhubung';
-  $('#accountHint').textContent = 'Akses unggah hanya diminta saat Anda memilih untuk menghubungkan akun.';
-  setStatus('Akun dilepas dari sesi halaman ini.');
-  updateControls();
 });
 
 fileInput.addEventListener('change', () => {
@@ -233,14 +284,12 @@ rightsCheck.addEventListener('change', updateControls);
 $('#uploadForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!accessToken || !selectedFile || !titleInput.value.trim() || !rightsCheck.checked || uploading) return;
-
   uploading = true;
   progress.hidden = false;
   progressFill.style.width = '0%';
   successLink.hidden = true;
   setStatus('Menyiapkan unggahan langsung…');
   updateControls();
-
   const metadata = {
     snippet: {
       title: titleInput.value.trim(),
@@ -248,18 +297,16 @@ $('#uploadForm').addEventListener('submit', async (event) => {
     },
     status: { privacyStatus: $('#privacyStatus').value }
   };
-
   try {
+    accessToken = await refreshAccessToken();
     const uploaded = await uploadVideo(selectedFile, metadata, accessToken);
     progressFill.style.width = '100%';
     setStatus('Unggahan selesai. Video mungkin masih diproses sebelum dapat diputar.');
     successLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(uploaded.id)}`;
     successLink.hidden = false;
   } catch (error) {
-    if (error.status === 401) {
-      accessToken = null;
-      $('#accountLabel').textContent = 'Sesi perlu diperbarui';
-      $('#accountHint').textContent = 'Hubungkan akun kembali sebelum mengunggah.';
+    if (error.status === 401 || error.reconnect) {
+      setDisconnected(error.message || 'Hubungkan kembali akun sebelum mengunggah.');
     }
     setStatus(error.message || 'Unggahan gagal. Periksa koneksi dan setelan akun, lalu coba lagi.', true);
   } finally {
