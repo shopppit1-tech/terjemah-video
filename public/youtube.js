@@ -1,0 +1,271 @@
+import { requireLogin } from './firebase-client.js';
+
+const CLIENT_ID = '104739459438-ojqbhl406868qbgdi1hoeb8bm4qdmbef.apps.googleusercontent.com';
+const UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
+const UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status';
+
+await requireLogin();
+
+const $ = (selector) => document.querySelector(selector);
+const connectButton = $('#connectButton');
+const disconnectButton = $('#disconnectButton');
+const uploadButton = $('#uploadButton');
+const fileInput = $('#videoFile');
+const titleInput = $('#videoTitle');
+const descriptionInput = $('#videoDescription');
+const rightsCheck = $('#rightsCheck');
+const statusNode = $('#status');
+const progress = $('#progress');
+const progressFill = $('#progressFill');
+const successLink = $('#successLink');
+let tokenClient = null;
+let accessToken = null;
+let selectedFile = null;
+let uploading = false;
+let authorizationTimer = null;
+
+function setStatus(message, isError = false) {
+  statusNode.textContent = message;
+  statusNode.className = `status${isError ? ' error' : ''}`;
+}
+
+function updateControls() {
+  connectButton.disabled = !tokenClient || uploading;
+  disconnectButton.hidden = !accessToken;
+  uploadButton.disabled = uploading || !accessToken || !selectedFile || !titleInput.value.trim() || !rightsCheck.checked;
+  fileInput.disabled = uploading;
+  titleInput.disabled = uploading;
+  descriptionInput.disabled = uploading;
+  $('#privacyStatus').disabled = uploading;
+  rightsCheck.disabled = uploading;
+}
+
+function displayBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function parseResponse(text) {
+  try { return text ? JSON.parse(text) : null; } catch { return null; }
+}
+
+function apiErrorMessage(text, statusCode) {
+  const response = parseResponse(text);
+  const message = response?.error?.message || response?.error_description;
+  if (message) return message;
+  if (statusCode === 401) return 'Sesi YouTube berakhir. Hubungkan akun kembali, lalu ulangi unggahan.';
+  if (statusCode === 403) return 'Akses unggah ditolak. Pastikan layanan unggah video diaktifkan untuk aplikasi ini.';
+  return `Unggahan gagal (HTTP ${statusCode || 'tidak diketahui'}). Coba lagi.`;
+}
+
+function waitForIdentityLibrary(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.oauth2) return resolve(window.google.accounts.oauth2);
+    const script = $('#googleIdentityScript');
+    const timeout = setTimeout(() => reject(new Error('Layanan akun tidak dapat dimuat. Periksa koneksi internet.')), timeoutMs);
+    script?.addEventListener('load', () => {
+      clearTimeout(timeout);
+      if (window.google?.accounts?.oauth2) resolve(window.google.accounts.oauth2);
+      else reject(new Error('Layanan akun tidak tersedia di browser ini.'));
+    }, { once: true });
+    script?.addEventListener('error', () => {
+      clearTimeout(timeout);
+      reject(new Error('Gagal memuat layanan akun. Periksa koneksi internet.'));
+    }, { once: true });
+  });
+}
+
+function clearAuthorizationTimer() {
+  if (authorizationTimer) clearTimeout(authorizationTimer);
+  authorizationTimer = null;
+}
+
+function handleTokenResponse(response) {
+  clearAuthorizationTimer();
+  connectButton.textContent = 'Hubungkan akun';
+  if (response?.error || !response?.access_token) {
+    accessToken = null;
+    $('#accountLabel').textContent = 'Belum terhubung';
+    $('#accountHint').textContent = 'Akses unggah hanya diminta saat Anda memilih untuk menghubungkan akun.';
+    setStatus(response?.error_description || response?.error || 'Persetujuan akun tidak berhasil.', true);
+    updateControls();
+    return;
+  }
+
+  const grantedScopes = String(response.scope || '').split(/\s+/);
+  if (response.scope && !grantedScopes.includes(UPLOAD_SCOPE)) {
+    accessToken = null;
+    setStatus('Izin unggah belum disetujui. Hubungkan kembali dan setujui akses yang diminta.', true);
+    updateControls();
+    return;
+  }
+
+  accessToken = response.access_token;
+  $('#accountLabel').textContent = 'Akun siap untuk sesi ini';
+  $('#accountHint').textContent = 'Token akses hanya disimpan sementara di halaman ini dan tidak disimpan ke server.';
+  setStatus('Akun terhubung. Pilih video dan lengkapi detail unggahan.');
+  updateControls();
+}
+
+async function initializeOAuth() {
+  try {
+    const oauth = await waitForIdentityLibrary();
+    tokenClient = oauth.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: UPLOAD_SCOPE,
+      callback: handleTokenResponse,
+      error_callback: (error) => {
+        clearAuthorizationTimer();
+        connectButton.textContent = 'Hubungkan akun';
+        setStatus(error?.message || 'Jendela persetujuan tidak dapat dibuka. Coba lagi.', true);
+        updateControls();
+      }
+    });
+    connectButton.disabled = false;
+    $('#accountHint').textContent = 'Saat dihubungkan, Anda akan diminta menyetujui izin unggah video.';
+    updateControls();
+  } catch (error) {
+    $('#accountHint').textContent = error.message;
+    setStatus(error.message, true);
+  }
+}
+
+function createMultipartBody(file, metadata) {
+  const random = globalThis.crypto?.randomUUID?.().replaceAll('-', '') || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  const boundary = `videoteks${random}`;
+  const mediaType = /^video\/[a-z0-9.+-]+$/i.test(file.type) ? file.type : 'application/octet-stream';
+  const firstPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${mediaType}\r\n\r\n`;
+  const lastPart = `\r\n--${boundary}--\r\n`;
+  return new Blob([firstPart, file, lastPart], { type: `multipart/related; boundary=${boundary}` });
+}
+
+function uploadVideo(file, metadata, token) {
+  return new Promise((resolve, reject) => {
+    const body = createMultipartBody(file, metadata);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', UPLOAD_ENDPOINT, true);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Content-Type', body.type);
+    xhr.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable) return;
+      const percent = Math.min(99, Math.floor((event.loaded / event.total) * 100));
+      progressFill.style.width = `${percent}%`;
+      setStatus(`Mengunggah video… ${percent}% (${displayBytes(Math.min(event.loaded, body.size))} dari ${displayBytes(body.size)})`);
+    });
+    xhr.onload = () => {
+      const response = parseResponse(xhr.responseText);
+      if ((xhr.status === 200 || xhr.status === 201) && response?.id) {
+        resolve(response);
+        return;
+      }
+      const error = new Error(apiErrorMessage(xhr.responseText, xhr.status));
+      error.status = xhr.status;
+      reject(error);
+    };
+    xhr.onerror = () => reject(new Error('Koneksi terputus. Jika unggahan berhenti, pilih video dan mulai lagi.'));
+    xhr.onabort = () => reject(new Error('Unggahan dibatalkan.'));
+    xhr.send(body);
+  });
+}
+
+connectButton.addEventListener('click', () => {
+  if (!tokenClient || uploading) return;
+  connectButton.disabled = true;
+  connectButton.textContent = 'Menunggu…';
+  setStatus('Menunggu persetujuan akses unggah…');
+  tokenClient.requestAccessToken({ prompt: 'select_account' });
+  clearAuthorizationTimer();
+  authorizationTimer = setTimeout(() => {
+    connectButton.textContent = 'Hubungkan akun';
+    updateControls();
+    if (!accessToken) setStatus('Jika jendela persetujuan ditutup, tekan Hubungkan akun untuk mencoba lagi.');
+  }, 15000);
+});
+
+disconnectButton.addEventListener('click', () => {
+  if (accessToken && window.google?.accounts?.oauth2?.revoke) {
+    window.google.accounts.oauth2.revoke(accessToken, () => {});
+  }
+  accessToken = null;
+  $('#accountLabel').textContent = 'Belum terhubung';
+  $('#accountHint').textContent = 'Akses unggah hanya diminta saat Anda memilih untuk menghubungkan akun.';
+  setStatus('Akun dilepas dari sesi halaman ini.');
+  updateControls();
+});
+
+fileInput.addEventListener('change', () => {
+  selectedFile = fileInput.files?.[0] || null;
+  if (!selectedFile) {
+    $('#fileName').textContent = 'Belum ada video dipilih';
+    updateControls();
+    return;
+  }
+  if (selectedFile.type && !selectedFile.type.startsWith('video/')) {
+    selectedFile = null;
+    fileInput.value = '';
+    $('#fileName').textContent = 'Pilih file video yang valid';
+    setStatus('File yang dipilih bukan file video.', true);
+    updateControls();
+    return;
+  }
+  $('#fileName').textContent = `${selectedFile.name} · ${displayBytes(selectedFile.size)}`;
+  if (!titleInput.value.trim()) {
+    titleInput.value = selectedFile.name.replace(/\.[^.]+$/, '').slice(0, 100);
+    $('#titleCount').textContent = String(titleInput.value.length);
+  }
+  successLink.hidden = true;
+  updateControls();
+});
+
+titleInput.addEventListener('input', () => {
+  $('#titleCount').textContent = String(titleInput.value.length);
+  updateControls();
+});
+
+descriptionInput.addEventListener('input', () => {
+  $('#descriptionCount').textContent = String(descriptionInput.value.length);
+});
+
+rightsCheck.addEventListener('change', updateControls);
+
+$('#uploadForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!accessToken || !selectedFile || !titleInput.value.trim() || !rightsCheck.checked || uploading) return;
+
+  uploading = true;
+  progress.hidden = false;
+  progressFill.style.width = '0%';
+  successLink.hidden = true;
+  setStatus('Menyiapkan unggahan langsung…');
+  updateControls();
+
+  const metadata = {
+    snippet: {
+      title: titleInput.value.trim(),
+      description: descriptionInput.value.trim()
+    },
+    status: { privacyStatus: $('#privacyStatus').value }
+  };
+
+  try {
+    const uploaded = await uploadVideo(selectedFile, metadata, accessToken);
+    progressFill.style.width = '100%';
+    setStatus('Unggahan selesai. Video mungkin masih diproses sebelum dapat diputar.');
+    successLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(uploaded.id)}`;
+    successLink.hidden = false;
+  } catch (error) {
+    if (error.status === 401) {
+      accessToken = null;
+      $('#accountLabel').textContent = 'Sesi perlu diperbarui';
+      $('#accountHint').textContent = 'Hubungkan akun kembali sebelum mengunggah.';
+    }
+    setStatus(error.message || 'Unggahan gagal. Periksa koneksi dan setelan akun, lalu coba lagi.', true);
+  } finally {
+    uploading = false;
+    updateControls();
+  }
+});
+
+void initializeOAuth();

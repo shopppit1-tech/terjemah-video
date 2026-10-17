@@ -5,6 +5,7 @@ const ROUTES = {
   app: { file: 'app.html', title: 'Subtitle Video' },
   audio: { file: 'audio.html', title: 'Ganti Audio' },
   voice: { file: 'voice.html', title: 'Suara AI' },
+  youtube: { file: 'youtube.html', title: 'Upload YouTube' },
   history: { file: 'history.html', title: 'Riwayat' },
   privacy: { file: 'privacy.html', title: 'Kebijakan Privasi' },
   delete: { file: 'delete-account.html', title: 'Hapus akun' }

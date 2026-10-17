@@ -2,6 +2,7 @@ const FEATURE_ROUTES = {
   'app.html': 'app',
   'audio.html': 'audio',
   'voice.html': 'voice',
+  'youtube.html': 'youtube',
   'history.html': 'history'
 };
 const SHELL_ROUTES = {
