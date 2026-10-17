@@ -18,7 +18,7 @@ let audioUrl = null;
 let busy = false;
 
 downloadLink.addEventListener('click', () => {
-  downloadLink.download = downloadName('suara-ai-gemini', '.wav');
+  downloadLink.download = downloadName('suara-ai', '.wav');
 });
 
 function saveAudioForHandoff(blob) {
@@ -29,7 +29,7 @@ function saveAudioForHandoff(blob) {
     request.onsuccess = () => {
       const database = request.result;
       const transaction = database.transaction('generated', 'readwrite');
-      transaction.objectStore('generated').put({ blob, name: 'suara-ai-gemini.wav', createdAt: Date.now() }, 'latest');
+      transaction.objectStore('generated').put({ blob, name: 'suara-ai.wav', createdAt: Date.now() }, 'latest');
       transaction.oncomplete = () => { database.close(); resolve(); };
       transaction.onerror = () => { database.close(); reject(transaction.error); };
     };
@@ -53,7 +53,7 @@ generateBtn.onclick = async () => {
   updateCount();
   result.hidden = true;
   generateBtn.textContent = 'Membuat suara...';
-  setStatus('Gemini sedang membuat audio...');
+  setStatus('Sedang membuat audio...');
   try {
     const response = await authenticatedFetch('/api/generate-voice', {
       method: 'POST',
@@ -61,8 +61,7 @@ generateBtn.onclick = async () => {
       body: JSON.stringify({ text, voice: voiceSelect.value, style: styleInput.value })
     });
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Suara AI gagal dibuat.');
+      throw new Error('Audio tidak dapat dibuat. Coba lagi sebentar lagi.');
     }
     const blob = await response.blob();
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -72,7 +71,7 @@ generateBtn.onclick = async () => {
     audioHandoff.href = 'audio.html?generated=1';
     try { await saveAudioForHandoff(blob); } catch { /* unduhan tetap tersedia jika penyimpanan browser tidak tersedia */ }
     result.hidden = false;
-    const historyStatus = response.headers.get('X-History-Saved') === 'true' ? 'Riwayat tersimpan.' : 'Riwayat belum tersimpan; aktifkan Cloud Firestore API untuk menyimpan aktivitas.';
+    const historyStatus = response.headers.get('X-History-Saved') === 'true' ? 'Riwayat tersimpan.' : 'Riwayat belum tersimpan.';
     setStatus(`Selesai. Audio siap diputar atau diunduh. ${historyStatus}`);
   } catch (error) {
     setStatus(error.message, true);

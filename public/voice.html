@@ -29,9 +29,9 @@ body{min-height:100dvh}.app{width:min(100%,480px);min-height:100dvh;margin:auto;
     <a class="active" href="voice.html" aria-current="page">Suara AI</a>
   </nav>
   <header class="hero">
-    <p class="eyebrow">FITUR AI GEMINI</p>
+    <p class="eyebrow">FITUR SUARA AI</p>
     <h1>Teks jadi suara</h1>
-    <p>Tulis teks, pilih karakter suara, lalu buat audio narasi dengan Gemini memakai API key milikmu.</p>
+    <p>Tulis teks, pilih karakter suara, lalu ubah menjadi audio narasi yang siap diputar atau diunduh.</p>
   </header>
   <section class="card">
     <div class="field">
@@ -53,11 +53,11 @@ body{min-height:100dvh}.app{width:min(100%,480px);min-height:100dvh;margin:auto;
         </select>
       </div>
     </div>
-    <p class="hint">Bahasa suara mengikuti bahasa teks secara otomatis. API key tidak dikirim ke browser; permintaan diproses aman di server.</p>
+    <p class="hint">Bahasa suara mengikuti teks secara otomatis. Hasilnya dapat diputar atau diunduh setelah selesai dibuat.</p>
     <button id="generateBtn" class="btn" type="button">Buat suara AI</button>
     <div id="result" class="result" hidden>
       <audio id="audioResult" controls></audio>
-      <a id="downloadLink" class="download" download="suara-ai-gemini.wav">Unduh audio WAV</a>
+      <a id="downloadLink" class="download" download="suara-ai.wav">Unduh audio WAV</a>
       <a id="audioHandoff" class="download" href="audio.html?generated=1">Lanjut ke Ganti Audio</a>
     </div>
     <div id="status" class="status" aria-live="polite">Masukkan teks untuk mulai.</div>

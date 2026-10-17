@@ -54,7 +54,7 @@ function loadGeneratedAudio() {
         setStatus('Audio AI tidak ditemukan. Buat audio terlebih dahulu.', true);
         return;
       }
-      const file = new File([record.blob], record.name || 'suara-ai-gemini.wav', { type: record.blob.type || 'audio/wav' });
+      const file = new File([record.blob], record.name || 'suara-ai.wav', { type: record.blob.type || 'audio/wav' });
       try {
         const transfer = new DataTransfer();
         transfer.items.add(file);
