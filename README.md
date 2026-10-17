@@ -35,7 +35,11 @@ API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halama
 
 ### Koneksi YouTube otomatis
 
-Buat OAuth 2.0 Client ID bertipe **Web application** di Google Cloud Console untuk proyek yang mengaktifkan **YouTube Data API v3**. Tambahkan origin situs VideoTeks (`https://shopppit1-tech.github.io`) dan origin Render (`https://terjemah-video.onrender.com`) ke **Authorized JavaScript origins**. Gunakan pasangan Client ID dan Client Secret dari client yang sama.
+Buat OAuth 2.0 Client ID bertipe **Web application** di Google Cloud Console untuk proyek yang mengaktifkan **YouTube Data API v3**. Untuk situs GitHub Pages yang dipakai sekarang, tambahkan `https://shopppit1-tech.github.io` ke **Authorized JavaScript origins** (tanpa path). Untuk pengujian lokal, tambahkan `http://localhost:3000` dan `http://127.0.0.1:3000`. Kode memakai GIS popup, jadi **Authorized redirect URIs** boleh dikosongkan. Jangan daftarkan origin API Render kecuali halaman web VideoTeks memang dibuka langsung dari origin itu.
+
+Di **Data Access**, daftarkan scope `https://www.googleapis.com/auth/youtube.upload`. Di **Audience**, pilih **External** bila pengguna memakai akun Google umum; selama status **Testing**, tambahkan email penguji pada **Test users**. Catatan: refresh token untuk aplikasi External yang masih Testing berakhir setelah 7 hari. Agar koneksi dapat bertahan lebih lama, ubah status publikasi ke **Production** dan selesaikan verifikasi Google jika diminta. Di **Branding → Authorized domains**, cukup simpan `shopppit1-tech.github.io` satu kali; domain ini tanpa skema atau path.
+
+Gunakan pasangan Client ID dan Client Secret dari OAuth Web Client yang sama.
 
 Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, serta `YOUTUBE_TOKEN_ENCRYPTION_KEY` pada server. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
 
