@@ -1,4 +1,4 @@
-const CACHE = 'videoteks-shell-v28';
+const CACHE = 'videoteks-shell-v29';
 const BASE_URL = new URL('./', self.location.href);
 const HOME_URL = new URL('index.html', BASE_URL).href;
 const SHELL_FILES = [
