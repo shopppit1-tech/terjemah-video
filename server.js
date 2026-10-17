@@ -357,7 +357,13 @@ function subtitleStyle(settings) {
 async function cleanup(...files) { await Promise.all(files.filter(Boolean).map(f => fs.rm(f, { force: true }).catch(() => {}))); }
 function responseText(data) { return data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || ''; }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'videoteks', provider: 'gemini' }));
+app.get('/api/health', (_req, res) => res.json({
+  ok: true,
+  service: 'videoteks',
+  provider: 'gemini',
+  geminiYoutubeConfigured: Boolean(youtubeSeoAIConfig()),
+  youtubeOAuthConfigured: Boolean(youtubeOAuthConfig())
+}));
 
 app.post('/api/transcribe', requireFirebaseUser, upload.single('video'), async (req, res) => {
   if (!requireKey(res)) return;
