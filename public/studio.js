@@ -8,6 +8,7 @@ const ROUTES = {
   youtube: { file: 'youtube.html', title: 'Upload YouTube' },
   history: { file: 'history.html', title: 'Riwayat' },
   privacy: { file: 'privacy.html', title: 'Kebijakan Privasi' },
+  terms: { file: 'terms.html', title: 'Syarat Penggunaan' },
   delete: { file: 'delete-account.html', title: 'Hapus akun' }
 };
 const ROUTE_BY_FILE = Object.fromEntries(Object.entries(ROUTES).map(([route, page]) => [page.file, route]));

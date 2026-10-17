@@ -1,10 +1,11 @@
-const CACHE = 'videoteks-shell-v31';
+const CACHE = 'videoteks-shell-v32';
 const BASE_URL = new URL('./', self.location.href);
 const HOME_URL = new URL('index.html', BASE_URL).href;
 const SHELL_FILES = [
   '',
   'index.html',
   'privacy.html',
+  'terms.html',
   'delete-account.html',
   'login.js',
   'login.js?v=restore-popup-1',

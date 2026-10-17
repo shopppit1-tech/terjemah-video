@@ -8,6 +8,7 @@ const FEATURE_ROUTES = {
 const SHELL_ROUTES = {
   ...FEATURE_ROUTES,
   'privacy.html': 'privacy',
+  'terms.html': 'terms',
   'delete-account.html': 'delete',
   'index.html': 'app'
 };
