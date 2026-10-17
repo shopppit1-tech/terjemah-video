@@ -1,4 +1,4 @@
-import { signInWithGoogleIdToken, waitForUser } from './firebase-client.js';
+import { signInWithGoogleIdToken, waitForUser } from './firebase-client.js?v=gsi-1';
 
 const status = document.querySelector('#loginStatus');
 const buttonContainer = document.querySelector('#googleSignInButton');

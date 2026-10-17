@@ -1,4 +1,4 @@
-const CACHE = 'videoteks-shell-v25';
+const CACHE = 'videoteks-shell-v26';
 const BASE_URL = new URL('./', self.location.href);
 const HOME_URL = new URL('index.html', BASE_URL).href;
 const SHELL_FILES = [
@@ -7,8 +7,10 @@ const SHELL_FILES = [
   'privacy.html',
   'delete-account.html',
   'login.js',
+  'login.js?v=gsi-1',
   'pwa-install.js',
   'firebase-client.js',
+  'firebase-client.js?v=gsi-1',
   'page-navigation.js',
   'studio.html',
   'studio.js',
