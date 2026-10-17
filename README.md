@@ -41,7 +41,7 @@ Di **Data Access**, daftarkan scope `https://www.googleapis.com/auth/youtube.upl
 
 Gunakan pasangan Client ID dan Client Secret dari OAuth Web Client yang sama.
 
-Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, serta `YOUTUBE_TOKEN_ENCRYPTION_KEY` pada server. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
+Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`, serta `YOUTUBE_REDIRECT_URI=https://shopppit1-tech.github.io/videoteks/` pada server. Nilai redirect URI harus sama persis dengan URI pada OAuth Web Client. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
 
 Di halaman **Subtitle Video**, pilih bahasa tujuan dan tekan **Terjemahkan** untuk memakai endpoint penerjemahan yang sudah ada. Setelah ekspor MP4 berhasil, tekan **Lanjutkan video ke YouTube**; MP4 dan teks subtitle disimpan sementara di IndexedDB pada browser yang sama, lalu dimuat otomatis pada halaman upload. Video tetap dapat diunduh seperti biasa.
 
@@ -66,6 +66,7 @@ Metadata SEO YouTube memakai Gemini khusus yang terpisah dari `GEMINI_API_KEY` d
    - `YOUTUBE_CLIENT_ID`: OAuth Web Client ID Google
    - `YOUTUBE_CLIENT_SECRET`: Client Secret untuk OAuth Web Client yang sama
    - `YOUTUBE_TOKEN_ENCRYPTION_KEY`: kunci acak 64 karakter heksadesimal dari `openssl rand -hex 32`
+   - `YOUTUBE_REDIRECT_URI`: `https://shopppit1-tech.github.io/videoteks/`
    - `GEMINI_YOUTUBE_API_KEY`: API key Gemini khusus judul dan deskripsi YouTube
    - `GEMINI_YOUTUBE_MODEL`: `gemini-3.8-flash`
 5. Di Firebase Authentication, aktifkan Google Sign-In dan tambahkan domain Render pada Authorized domains. Buat Firestore Database.

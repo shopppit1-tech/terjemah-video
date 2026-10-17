@@ -15,6 +15,7 @@ const exec = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const FIREBASE_PROJECT_ID = 'videoteks-a82c1';
+const YOUTUBE_REDIRECT_URI = process.env.YOUTUBE_REDIRECT_URI || 'https://shopppit1-tech.github.io/videoteks/';
 let firebaseAdminAuth = null;
 let firebaseDb = null;
 try {
@@ -714,6 +715,9 @@ app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
   if (!origin || !allowedOrigins.has(origin) || req.get('X-Requested-With') !== 'XmlHttpRequest') {
     return res.status(403).json({ error: 'Permintaan OAuth YouTube tidak valid.' });
   }
+  if (YOUTUBE_REDIRECT_URI !== 'https://shopppit1-tech.github.io/videoteks/' && !YOUTUBE_REDIRECT_URI.startsWith(`${origin}/`)) {
+    return res.status(500).json({ error: 'YOUTUBE_REDIRECT_URI tidak sesuai dengan domain aplikasi.' });
+  }
   const code = typeof req.body?.code === 'string' ? req.body.code : '';
   if (!code || code.length > 4096) return res.status(400).json({ error: 'Kode otorisasi YouTube tidak valid.' });
   try {
@@ -721,7 +725,7 @@ app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
       code,
       client_id: config.clientId,
       client_secret: config.clientSecret,
-      redirect_uri: origin,
+      redirect_uri: YOUTUBE_REDIRECT_URI,
       grant_type: 'authorization_code'
     });
     const grantedScopes = String(tokens.scope || '').split(/\s+/);
