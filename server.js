@@ -81,6 +81,32 @@ function youtubeOAuthConfig() {
   return { clientId, clientSecret, encryptionKey: Buffer.from(encryptionKey, 'hex') };
 }
 
+function youtubeSeoAIConfig() {
+  const apiKey = String(process.env.YOUTUBE_SEO_AI_API_KEY || '').trim();
+  const model = String(process.env.YOUTUBE_SEO_AI_MODEL || '').trim();
+  const endpoint = String(process.env.YOUTUBE_SEO_AI_BASE_URL || 'https://api.openai.com/v1/chat/completions').trim();
+  if (!apiKey || !model) return null;
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))) return null;
+    return { apiKey, model, endpoint: url.toString() };
+  } catch {
+    return null;
+  }
+}
+
+function parseSeoMetadata(value) {
+  const cleaned = String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error('AI SEO mengembalikan format yang tidak dikenali. Coba lagi.');
+  }
+}
+
 function encryptYoutubeRefreshToken(token, encryptionKey) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
@@ -634,6 +660,53 @@ app.get('/api/youtube/status', requireFirebaseUser, async (req, res) => {
   } catch (error) {
     console.error('[youtube] gagal membaca status koneksi:', error.message);
     res.status(500).json({ error: 'Status koneksi YouTube gagal dimuat.' });
+  }
+});
+
+app.get('/api/youtube/seo-status', requireFirebaseUser, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ configured: Boolean(youtubeSeoAIConfig()) });
+});
+
+app.post('/api/youtube/seo-metadata', requireFirebaseUser, async (req, res) => {
+  const config = youtubeSeoAIConfig();
+  if (!config) return res.status(503).json({ error: 'AI SEO belum dikonfigurasi. Isi variabel YOUTUBE_SEO_AI_API_KEY, YOUTUBE_SEO_AI_MODEL, dan YOUTUBE_SEO_AI_BASE_URL di server.' });
+  const captions = String(req.body?.captions || '').trim().slice(0, 12000);
+  const language = String(req.body?.language || '').trim().slice(0, 80);
+  const topic = String(req.body?.topic || '').trim().slice(0, 240);
+  if (!captions && !topic) return res.status(400).json({ error: 'Masukkan topik atau teruskan subtitle agar AI SEO memiliki konteks.' });
+  const prompt = [
+    'Buat metadata YouTube yang menarik dan ramah pencarian berdasarkan konteks yang diberikan.',
+    'Jangan mengarang fakta yang tidak ada dalam konteks. Hindari clickbait menyesatkan.',
+    'Kembalikan hanya JSON valid dengan tepat dua string: {"title":"...","description":"..."}.',
+    'Judul maksimal 100 karakter. Deskripsi maksimal 5000 karakter, tulis ringkas, relevan, natural, dan boleh menyertakan tagar seperlunya.',
+    language ? `Bahasa target subtitle/video: ${language}. Tulis metadata dalam bahasa tersebut.` : 'Gunakan bahasa yang paling sesuai dengan konteks.',
+    topic ? `Topik/kata kunci tambahan dari pengguna: ${topic}` : '',
+    captions ? `Subtitle/konteks video:\n${captions}` : ''
+  ].filter(Boolean).join('\n\n');
+  try {
+    const response = await fetch(config.endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5 }),
+      signal: AbortSignal.timeout(45000)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn(`[youtube-seo] provider returned HTTP ${response.status}`);
+      return res.status(502).json({ error: 'AI SEO tidak dapat membuat metadata. Periksa URL, model, dan API key AI SEO yang Anda atur.' });
+    }
+    const content = result?.choices?.[0]?.message?.content;
+    const text = Array.isArray(content) ? content.map((part) => part?.text || '').join('') : content;
+    const metadata = parseSeoMetadata(text);
+    const title = String(metadata?.title || '').trim().slice(0, 100);
+    const description = String(metadata?.description || '').trim().slice(0, 5000);
+    if (!title || !description) return res.status(502).json({ error: 'AI SEO tidak mengembalikan judul dan deskripsi. Coba lagi.' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ title, description });
+  } catch (error) {
+    console.warn('[youtube-seo] request failed:', error.name || 'Error');
+    res.status(502).json({ error: 'Koneksi ke AI SEO gagal. Periksa konfigurasi dan coba lagi.' });
   }
 });
 
