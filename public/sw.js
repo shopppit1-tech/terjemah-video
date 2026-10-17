@@ -1,4 +1,4 @@
-const CACHE = 'videoteks-shell-v23';
+const CACHE = 'videoteks-shell-v24';
 const BASE_URL = new URL('./', self.location.href);
 const HOME_URL = new URL('index.html', BASE_URL).href;
 const SHELL_FILES = [
@@ -10,6 +10,8 @@ const SHELL_FILES = [
   'pwa-install.js',
   'firebase-client.js',
   'page-navigation.js',
+  'studio.html',
+  'studio.js',
   'download-utils.js',
   'images/hero-studio-phone.webp',
   'app.html',

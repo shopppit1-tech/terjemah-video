@@ -39,8 +39,8 @@ function saveVideoForHandoff(blob) {
   });
 }
 
-function loadGeneratedAudio() {
-  if (new URLSearchParams(location.search).get('generated') !== '1') return;
+function loadGeneratedAudio(force = false) {
+  if (!force && new URLSearchParams(location.search).get('generated') !== '1') return;
   const request = indexedDB.open('videoteks-audio', 1);
   request.onupgradeneeded = () => request.result.createObjectStore('generated');
   request.onerror = () => setStatus('Penyimpanan audio AI tidak tersedia di browser.', true);
@@ -228,4 +228,9 @@ replaceBtn.onclick = async () => {
   }
 };
 
+window.addEventListener('message', (event) => {
+  if (event.origin === location.origin && event.source === window.parent && event.data?.source === 'videoteks-shell' && event.data.type === 'load-generated-audio') {
+    loadGeneratedAudio(true);
+  }
+});
 loadGeneratedAudio();

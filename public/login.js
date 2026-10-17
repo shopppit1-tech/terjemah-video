@@ -3,12 +3,22 @@ import { auth, signInWithGoogle, waitForUser } from './firebase-client.js';
 const button = document.querySelector('#googleSignIn');
 const status = document.querySelector('#loginStatus');
 const appBase = new URL('./', import.meta.url);
-const fallbackNext = new URL('app.html', appBase);
+const fallbackNext = new URL('studio.html?view=app', appBase);
 const requestedNext = new URLSearchParams(location.search).get('next') || fallbackNext.href;
 let nextUrl = fallbackNext.href;
+const featureRoutes = { 'app.html': 'app', 'audio.html': 'audio', 'voice.html': 'voice', 'history.html': 'history' };
+function normalizeNext(candidate) {
+  const route = featureRoutes[candidate.pathname.split('/').pop()];
+  if (!route) return candidate.href;
+  const shell = new URL('studio.html', appBase);
+  shell.searchParams.set('view', route);
+  candidate.searchParams.forEach((value, key) => { if (key !== 'view') shell.searchParams.append(key, value); });
+  shell.hash = candidate.hash;
+  return shell.href;
+}
 try {
   const candidate = new URL(requestedNext, appBase);
-  if (candidate.origin === location.origin && candidate.pathname.startsWith(appBase.pathname)) nextUrl = candidate.href;
+  if (candidate.origin === location.origin && candidate.pathname.startsWith(appBase.pathname)) nextUrl = normalizeNext(candidate);
 } catch { /* gunakan halaman subtitle sebagai tujuan aman */ }
 
 function setStatus(message, error = false) {
@@ -19,7 +29,6 @@ function setStatus(message, error = false) {
 try {
   const user = await waitForUser();
   if (user) {
-    document.body.classList.add('page-loading');
     location.replace(nextUrl);
   }
 } catch {
@@ -31,7 +40,6 @@ button.addEventListener('click', async () => {
   setStatus('Menghubungkan ke Google…');
   try {
     await signInWithGoogle();
-    document.body.classList.add('page-loading');
     location.replace(nextUrl);
   } catch (error) {
     const messages = {

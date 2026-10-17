@@ -52,8 +52,12 @@ function setProfileMenuOpen(button, menu, open) {
 export async function requireLogin() {
   const user = await waitForUser();
   if (!user) {
-    const next = `${location.pathname}${location.search}${location.hash}`;
-    location.replace(loginUrl(next));
+    const next = `${location.pathname}${location.search}`;
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: 'videoteks-feature', type: 'auth-required', next }, location.origin);
+    } else {
+      location.replace(loginUrl(next));
+    }
     return new Promise(() => {});
   }
 
@@ -86,6 +90,10 @@ export async function requireLogin() {
       button.disabled = true;
       try {
         await signOut(auth);
+        if (window.parent !== window) {
+          window.parent.postMessage({ source: 'videoteks-feature', type: 'signed-out' }, location.origin);
+          return;
+        }
         document.body.classList.add('page-loading');
         location.replace(appUrl('index.html'));
       } catch {
@@ -99,7 +107,12 @@ export async function requireLogin() {
 export async function authenticatedFetch(url, options = {}) {
   const user = auth.currentUser || await waitForUser();
   if (!user) {
-    location.replace(`/?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+    const next = `${location.pathname}${location.search}${location.hash}`;
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: 'videoteks-feature', type: 'auth-required', next }, location.origin);
+    } else {
+      location.replace(loginUrl(next));
+    }
     throw new Error('Silakan masuk dengan Google terlebih dahulu.');
   }
   const headers = new Headers(options.headers || {});

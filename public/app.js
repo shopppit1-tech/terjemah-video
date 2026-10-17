@@ -163,8 +163,8 @@ async function transcribeCurrentFile() {
 }
 $('#transcribeBtn').onclick = transcribeCurrentFile;
 
-function loadGeneratedVideo() {
-  if (new URLSearchParams(location.search).get('generated') !== '1') return;
+function loadGeneratedVideo(force = false) {
+  if (!force && new URLSearchParams(location.search).get('generated') !== '1') return;
   const request = indexedDB.open('videoteks-audio', 1);
   request.onupgradeneeded = () => request.result.createObjectStore('generated');
   request.onerror = () => setStatus('Video hasil Ganti Audio tidak dapat dibaca.', true);
@@ -186,6 +186,11 @@ function loadGeneratedVideo() {
   };
 }
 
+window.addEventListener('message', (event) => {
+  if (event.origin === location.origin && event.source === window.parent && event.data?.source === 'videoteks-shell' && event.data.type === 'load-generated-video') {
+    loadGeneratedVideo(true);
+  }
+});
 loadGeneratedVideo();
 $('#exportBtn').onclick = async () => {
   if (!state.file || !state.segments.length) return setStatus('Buat subtitle terlebih dahulu.', true);
