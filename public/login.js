@@ -1,4 +1,4 @@
-import { auth, signInWithGoogle, waitForUser } from './firebase-client.js';
+import { auth, signInWithGoogle, waitForUser } from './firebase-client.js?v=restore-popup-1';
 
 const button = document.querySelector('#googleSignIn');
 const status = document.querySelector('#loginStatus');
