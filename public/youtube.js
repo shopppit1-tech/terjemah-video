@@ -1,4 +1,5 @@
 import { authenticatedFetch, requireLogin } from './firebase-client.js';
+import { loadYoutubeHandoff } from './youtube-handoff.js';
 
 const UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 const UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status';
@@ -16,10 +17,17 @@ const statusNode = $('#status');
 const progress = $('#progress');
 const progressFill = $('#progressFill');
 const successLink = $('#successLink');
+const seoButton = $('#seoButton');
+const seoTopic = $('#seoTopic');
 let codeClient = null;
 let accessToken = null;
 let selectedFile = null;
 let uploading = false;
+let seoBusy = false;
+let seoAiConfigured = false;
+let sourceCaptions = '';
+let sourceLanguage = '';
+let loadingHandoff = false;
 let authorizationTimer = null;
 
 function setStatus(message, isError = false) {
@@ -36,6 +44,7 @@ function updateControls() {
   descriptionInput.disabled = uploading;
   $('#privacyStatus').disabled = uploading;
   rightsCheck.disabled = uploading;
+  seoButton.disabled = uploading || seoBusy || !seoAiConfigured;
 }
 
 function displayBytes(bytes) {
@@ -183,6 +192,7 @@ async function handleAuthorizationCode(response) {
 }
 
 async function initializeOAuth() {
+  void initializeSeo();
   try {
     const status = await apiRequest('/api/youtube/status', { method: 'GET' });
     const oauth = await waitForIdentityLibrary();
@@ -219,6 +229,46 @@ async function initializeOAuth() {
   }
 }
 
+async function initializeSeo() {
+  try {
+    const status = await apiRequest('/api/youtube/seo-status', { method: 'GET' });
+    seoAiConfigured = Boolean(status.configured);
+    $('#seoHint').textContent = seoAiConfigured
+      ? 'AI SEO terpisah sudah siap. Subtitle diteruskan sebagai konteks.'
+      : 'Isi YOUTUBE_SEO_AI_API_KEY, YOUTUBE_SEO_AI_MODEL, dan YOUTUBE_SEO_AI_BASE_URL di Render untuk mengaktifkan AI metadata.';
+  } catch (error) {
+    seoAiConfigured = false;
+    $('#seoHint').textContent = error.message || 'Status AI SEO belum dapat diperiksa.';
+  }
+  updateControls();
+}
+
+async function loadHandoffVideo() {
+  if (new URLSearchParams(location.search).get('handoff') !== 'latest') return;
+  try {
+    const record = await loadYoutubeHandoff();
+    if (!record?.blob) throw new Error('Hasil video belum ditemukan. Kembali ke halaman Subtitle Video dan ekspor hasil terlebih dahulu.');
+    const file = new File([record.blob], record.name || 'videoteks-subtitle.mp4', { type: record.blob.type || 'video/mp4' });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    loadingHandoff = true;
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event('change'));
+    loadingHandoff = false;
+    sourceCaptions = String(record.captions || '');
+    sourceLanguage = String(record.language || '');
+    $('#handoffHint').textContent = sourceLanguage
+      ? `Video hasil subtitle/terjemahan (${sourceLanguage}) dimasukkan otomatis.`
+      : 'Video hasil subtitle dimasukkan otomatis.';
+    $('#handoffHint').hidden = false;
+  } catch (error) {
+    loadingHandoff = false;
+    $('#handoffHint').textContent = error.message || 'Hasil video tidak dapat dimuat.';
+    $('#handoffHint').hidden = false;
+  }
+  updateControls();
+}
+
 connectButton.addEventListener('click', () => {
   if (!codeClient || uploading) return;
   connectButton.disabled = true;
@@ -248,6 +298,11 @@ disconnectButton.addEventListener('click', async () => {
 
 fileInput.addEventListener('change', () => {
   selectedFile = fileInput.files?.[0] || null;
+  if (!loadingHandoff) {
+    sourceCaptions = '';
+    sourceLanguage = '';
+    $('#handoffHint').hidden = true;
+  }
   if (!selectedFile) {
     $('#fileName').textContent = 'Belum ada video dipilih';
     updateControls();
@@ -277,6 +332,36 @@ titleInput.addEventListener('input', () => {
 
 descriptionInput.addEventListener('input', () => {
   $('#descriptionCount').textContent = String(descriptionInput.value.length);
+});
+
+seoButton.addEventListener('click', async () => {
+  if (!seoAiConfigured || seoBusy || uploading) return;
+  seoBusy = true;
+  seoButton.textContent = 'Membuat metadata…';
+  setStatus('AI SEO sedang menyiapkan judul dan deskripsi…');
+  updateControls();
+  try {
+    const data = await apiRequest('/api/youtube/seo-metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        captions: sourceCaptions,
+        language: sourceLanguage,
+        topic: seoTopic.value.trim()
+      })
+    });
+    titleInput.value = String(data.title || '').slice(0, 100);
+    descriptionInput.value = String(data.description || '').slice(0, 5000);
+    titleInput.dispatchEvent(new Event('input'));
+    descriptionInput.dispatchEvent(new Event('input'));
+    setStatus('Judul dan deskripsi SEO dibuat. Periksa dan edit sebelum mengunggah.');
+  } catch (error) {
+    setStatus(error.message || 'AI SEO gagal membuat metadata.', true);
+  } finally {
+    seoBusy = false;
+    seoButton.textContent = 'Buat judul & deskripsi SEO';
+    updateControls();
+  }
 });
 
 rightsCheck.addEventListener('change', updateControls);
@@ -316,3 +401,4 @@ $('#uploadForm').addEventListener('submit', async (event) => {
 });
 
 void initializeOAuth();
+void loadHandoffVideo();

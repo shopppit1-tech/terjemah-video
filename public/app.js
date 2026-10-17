@@ -1,9 +1,10 @@
 import { authenticatedFetch, requireLogin } from './firebase-client.js';
 import { downloadName } from './download-utils.js';
+import { saveYoutubeHandoff } from './youtube-handoff.js';
 
 await requireLogin();
 
-const state = { file: null, segments: [], color: '#ef4444', template: 'pill', fontSize: 28, position: 'bottom', fontFamily: 'DejaVu Sans', outputFormat: 'source' };
+const state = { file: null, segments: [], translationTarget: '', color: '#ef4444', template: 'pill', fontSize: 28, position: 'bottom', fontFamily: 'DejaVu Sans', outputFormat: 'source' };
 const previewFontStacks = {
   'DejaVu Sans': 'system-ui, -apple-system, "Segoe UI", sans-serif',
   'DejaVu Serif': 'Georgia, "Times New Roman", serif',
@@ -104,6 +105,7 @@ fileInput.onchange = (event) => {
   currentHistoryId = null;
   clearTimeout(historySaveTimer);
   state.segments = [];
+  state.translationTarget = '';
   caption.value = '';
   drawSegments(); syncCaption();
   video.src = URL.createObjectURL(state.file);
@@ -162,6 +164,43 @@ async function transcribeCurrentFile() {
   }
 }
 $('#transcribeBtn').onclick = transcribeCurrentFile;
+
+$('#translateBtn').onclick = async () => {
+  const target = $('#translationTarget').value.trim();
+  if (!state.segments.length) return setStatus('Buat teks subtitle terlebih dahulu.', true);
+  if (!target) return setStatus('Pilih bahasa tujuan terjemahan.', true);
+  const button = $('#translateBtn');
+  button.disabled = true;
+  setStatus(`Menerjemahkan subtitle ke ${target}...`);
+  try {
+    const response = await authenticatedFetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: state.segments.map((segment) => segment.text).join('\n'),
+        target,
+        historyId: currentHistoryId
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Terjemahan gagal dibuat.');
+    const translatedLines = String(data.text || '').replace(/\r/g, '').split('\n');
+    if (translatedLines.length !== state.segments.length) {
+      throw new Error('Jumlah baris hasil terjemahan tidak cocok dengan subtitle. Coba ulangi atau edit teks secara manual.');
+    }
+    state.segments = state.segments.map((segment, index) => ({ ...segment, text: translatedLines[index].trim() }));
+    state.translationTarget = target;
+    caption.value = state.segments[0]?.text || '';
+    drawSegments();
+    syncCaption();
+    scheduleHistorySave();
+    setStatus(data.historySaved ? `Terjemahan ${target} siap. Riwayat diperbarui.` : `Terjemahan ${target} siap.`);
+  } catch (error) {
+    setStatus(error.message || 'Terjemahan gagal dibuat.', true);
+  } finally {
+    button.disabled = false;
+  }
+};
 
 function loadGeneratedVideo(force = false) {
   if (!force && new URLSearchParams(location.search).get('generated') !== '1') return;
@@ -226,9 +265,21 @@ $('#exportBtn').onclick = async () => {
       blob = await response.blob();
     }
     showLoading('Mengunduh video... 100%'); setStatus('Mengunduh video... 100%');
+    try {
+      await saveYoutubeHandoff(blob, {
+        name: 'videoteks-subtitle.mp4',
+        captions: state.segments.map((segment) => segment.text).join('\n'),
+        language: state.translationTarget
+      });
+      $('#youtubeHandoffLink').hidden = false;
+    } catch (handoffError) {
+      $('#youtubeHandoffLink').hidden = true;
+      setStatus(`Video berhasil dibuat dan akan diunduh, tetapi tidak dapat disiapkan untuk YouTube: ${handoffError.message}`, true);
+    }
     const downloadUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = downloadUrl; link.download = downloadName('videoteks-subtitle', '.mp4'); link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
-    setStatus('Selesai. Video dengan template pilihan sudah diunduh.');
+    if (!$('#youtubeHandoffLink').hidden) setStatus('Video siap. Sudah diunduh dan bisa diteruskan ke halaman YouTube.');
+    else if (!status.classList.contains('error')) setStatus('Selesai. Video dengan template pilihan sudah diunduh.');
   } catch (error) { setStatus(error.message, true); }
   finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = originalButton; }
 };
