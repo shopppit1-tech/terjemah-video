@@ -1,6 +1,7 @@
 {
   "name": "VideoTeks — Subtitle dari Suara",
   "short_name": "VideoTeks",
+  "id": "./",
   "description": "Buat subtitle otomatis dari suara asli video, edit gaya tulisan, dan ekspor video.",
   "start_url": "./index.html",
   "scope": "./",
