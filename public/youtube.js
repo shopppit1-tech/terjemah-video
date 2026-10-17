@@ -234,8 +234,8 @@ async function initializeSeo() {
     const status = await apiRequest('/api/youtube/seo-status', { method: 'GET' });
     seoAiConfigured = Boolean(status.configured);
     $('#seoHint').textContent = seoAiConfigured
-      ? 'AI SEO terpisah sudah siap. Subtitle diteruskan sebagai konteks.'
-      : 'Isi YOUTUBE_SEO_AI_API_KEY, YOUTUBE_SEO_AI_MODEL, dan YOUTUBE_SEO_AI_BASE_URL di Render untuk mengaktifkan AI metadata.';
+      ? 'Gemini YouTube siap. Subtitle/narasi diteruskan sebagai konteks.'
+      : 'Isi GEMINI_YOUTUBE_API_KEY di Render untuk mengaktifkan AI judul dan deskripsi.';
   } catch (error) {
     seoAiConfigured = false;
     $('#seoHint').textContent = error.message || 'Status AI SEO belum dapat diperiksa.';

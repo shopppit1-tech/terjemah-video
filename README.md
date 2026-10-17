@@ -45,7 +45,7 @@ Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, serta `YOUTUBE_TOKEN_ENCRYPTI
 
 Di halaman **Subtitle Video**, pilih bahasa tujuan dan tekan **Terjemahkan** untuk memakai endpoint penerjemahan yang sudah ada. Setelah ekspor MP4 berhasil, tekan **Lanjutkan video ke YouTube**; MP4 dan teks subtitle disimpan sementara di IndexedDB pada browser yang sama, lalu dimuat otomatis pada halaman upload. Video tetap dapat diunduh seperti biasa.
 
-Metadata SEO memakai provider AI terpisah dari `GEMINI_API_KEY` dan `GEMINI_TTS_API_KEY`. Konfigurasikan `YOUTUBE_SEO_AI_API_KEY`, `YOUTUBE_SEO_AI_MODEL`, dan `YOUTUBE_SEO_AI_BASE_URL` pada Render; URL harus endpoint chat-completions yang kompatibel dengan OpenAI (default `https://api.openai.com/v1/chat/completions`). API key ini hanya dibaca server. Tombol **Buat judul & deskripsi SEO** meneruskan subtitle hasil terjemahan dan topik opsional ke provider itu; hasil tetap dapat diedit sebelum unggah.
+Metadata SEO YouTube memakai Gemini khusus yang terpisah dari `GEMINI_API_KEY` dan `GEMINI_TTS_API_KEY`. Konfigurasikan `GEMINI_YOUTUBE_API_KEY` dan `GEMINI_YOUTUBE_MODEL` pada Render. API key ini hanya dibaca server. Tombol **Buat judul & deskripsi SEO** meneruskan subtitle/narasi hasil transkripsi atau terjemahan dan topik opsional ke Gemini; hasil tetap dapat diedit sebelum unggah.
 
 ## Deploy ke Render
 
@@ -66,9 +66,8 @@ Metadata SEO memakai provider AI terpisah dari `GEMINI_API_KEY` dan `GEMINI_TTS_
    - `YOUTUBE_CLIENT_ID`: OAuth Web Client ID Google
    - `YOUTUBE_CLIENT_SECRET`: Client Secret untuk OAuth Web Client yang sama
    - `YOUTUBE_TOKEN_ENCRYPTION_KEY`: kunci acak 64 karakter heksadesimal dari `openssl rand -hex 32`
-   - `YOUTUBE_SEO_AI_API_KEY`: API key provider AI SEO pilihan Anda (terpisah)
-   - `YOUTUBE_SEO_AI_MODEL`: nama model metadata SEO pada provider tersebut
-   - `YOUTUBE_SEO_AI_BASE_URL`: endpoint chat-completions kompatibel OpenAI
+   - `GEMINI_YOUTUBE_API_KEY`: API key Gemini khusus judul dan deskripsi YouTube
+   - `GEMINI_YOUTUBE_MODEL`: `gemini-3.8-flash`
 5. Di Firebase Authentication, aktifkan Google Sign-In dan tambahkan domain Render pada Authorized domains. Buat Firestore Database.
 6. Jangan menaruh API key Gemini atau service-account private key di file frontend atau GitHub. Tanpa `FIREBASE_SERVICE_ACCOUNT_JSON`, endpoint aplikasi mengembalikan status konfigurasi belum siap.
 

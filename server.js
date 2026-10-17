@@ -82,17 +82,10 @@ function youtubeOAuthConfig() {
 }
 
 function youtubeSeoAIConfig() {
-  const apiKey = String(process.env.YOUTUBE_SEO_AI_API_KEY || '').trim();
-  const model = String(process.env.YOUTUBE_SEO_AI_MODEL || '').trim();
-  const endpoint = String(process.env.YOUTUBE_SEO_AI_BASE_URL || 'https://api.openai.com/v1/chat/completions').trim();
+  const apiKey = String(process.env.GEMINI_YOUTUBE_API_KEY || '').trim();
+  const model = String(process.env.GEMINI_YOUTUBE_MODEL || 'gemini-3.8-flash').trim();
   if (!apiKey || !model) return null;
-  try {
-    const url = new URL(endpoint);
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))) return null;
-    return { apiKey, model, endpoint: url.toString() };
-  } catch {
-    return null;
-  }
+  return { apiKey, model };
 }
 
 function parseSeoMetadata(value) {
@@ -670,7 +663,7 @@ app.get('/api/youtube/seo-status', requireFirebaseUser, (_req, res) => {
 
 app.post('/api/youtube/seo-metadata', requireFirebaseUser, async (req, res) => {
   const config = youtubeSeoAIConfig();
-  if (!config) return res.status(503).json({ error: 'AI SEO belum dikonfigurasi. Isi variabel YOUTUBE_SEO_AI_API_KEY, YOUTUBE_SEO_AI_MODEL, dan YOUTUBE_SEO_AI_BASE_URL di server.' });
+  if (!config) return res.status(503).json({ error: 'AI SEO Gemini YouTube belum dikonfigurasi. Isi GEMINI_YOUTUBE_API_KEY di server.' });
   const captions = String(req.body?.captions || '').trim().slice(0, 12000);
   const language = String(req.body?.language || '').trim().slice(0, 80);
   const topic = String(req.body?.topic || '').trim().slice(0, 240);
@@ -685,30 +678,28 @@ app.post('/api/youtube/seo-metadata', requireFirebaseUser, async (req, res) => {
     captions ? `Subtitle/konteks video:\n${captions}` : ''
   ].filter(Boolean).join('\n\n');
   try {
-    const response = await fetch(config.endpoint, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5 }),
-      signal: AbortSignal.timeout(45000)
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      console.warn(`[youtube-seo] provider returned HTTP ${response.status}`);
-      return res.status(502).json({ error: 'AI SEO tidak dapat membuat metadata. Periksa URL, model, dan API key AI SEO yang Anda atur.' });
-    }
-    const content = result?.choices?.[0]?.message?.content;
-    const text = Array.isArray(content) ? content.map((part) => part?.text || '').join('') : content;
+    const result = await geminiRequest(config.model, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.5, responseMimeType: 'application/json' }
+    }, config.apiKey);
+    const text = result?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('');
     const metadata = parseSeoMetadata(text);
     const title = String(metadata?.title || '').trim().slice(0, 100);
     const description = String(metadata?.description || '').trim().slice(0, 5000);
-    if (!title || !description) return res.status(502).json({ error: 'AI SEO tidak mengembalikan judul dan deskripsi. Coba lagi.' });
+    if (!title || !description) return res.status(502).json({ error: 'Gemini tidak mengembalikan judul dan deskripsi. Coba lagi.' });
     res.set('Cache-Control', 'no-store');
     res.json({ title, description });
   } catch (error) {
-    console.warn('[youtube-seo] request failed:', error.name || 'Error');
-    res.status(502).json({ error: 'Koneksi ke AI SEO gagal. Periksa konfigurasi dan coba lagi.' });
+    console.warn('[youtube-seo] Gemini request failed:', error.message || error.name || 'Error');
+    res.status(502).json({ error: 'Gemini tidak dapat membuat judul dan deskripsi. Periksa API key, model, kuota, lalu coba lagi.' });
   }
 });
+
+/*
+ * Metadata SEO YouTube menggunakan Gemini khusus dengan API key terpisah.
+ * Route di atas sengaja tidak memakai provider OpenAI/SEO lama.
+ */
+/* legacy block removed */
 
 app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
   const config = youtubeOAuthConfig();
