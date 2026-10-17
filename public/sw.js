@@ -1,9 +1,11 @@
-const CACHE = 'videoteks-shell-v20';
+const CACHE = 'videoteks-shell-v21';
 const BASE_URL = new URL('./', self.location.href);
 const HOME_URL = new URL('index.html', BASE_URL).href;
 const SHELL_FILES = [
   '',
   'index.html',
+  'privacy.html',
+  'delete-account.html',
   'login.js',
   'pwa-install.js',
   'firebase-client.js',
