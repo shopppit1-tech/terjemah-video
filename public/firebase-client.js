@@ -5,7 +5,7 @@ import {
   getAuth,
   onAuthStateChanged,
   setPersistence,
-  signInWithPopup,
+  signInWithCredential,
   signOut
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 
@@ -123,7 +123,9 @@ export async function authenticatedFetch(url, options = {}) {
   return fetch(endpoint, { ...options, headers });
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogleIdToken(idToken) {
+  if (typeof idToken !== 'string' || !idToken) throw new Error('Google tidak mengirim ID token.');
   await persistenceReady;
-  return signInWithPopup(auth, new GoogleAuthProvider());
+  const credential = GoogleAuthProvider.credential(idToken);
+  return signInWithCredential(auth, credential);
 }

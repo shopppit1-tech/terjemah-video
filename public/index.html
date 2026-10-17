@@ -12,6 +12,7 @@
   <link rel="preload" as="image" href="images/hero-studio-phone.webp">
   <link rel="stylesheet" href="auth-shell.css">
   <script src="page-navigation.js" defer></script>
+  <script id="googleIdentityScript" src="https://accounts.google.com/gsi/client" async defer referrerpolicy="strict-origin-when-cross-origin"></script>
   <title>VideoTeks — Studio AI untuk Video</title>
   <style>
     *{box-sizing:border-box}
@@ -32,13 +33,13 @@
     .features{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 25px}
     .feature{min-width:0;display:flex;gap:10px;padding:12px;border:1px solid #ffffff12;border-radius:15px;background:linear-gradient(145deg,#ffffff0b,#ffffff04)}
     .feature-icon{width:32px;height:32px;flex:none;display:grid;place-items:center;border:1px solid #b59bff35;border-radius:10px;background:linear-gradient(145deg,#7956bb35,#38b7d829);color:#e4d7ff;font-size:11px;font-weight:900}
-    .feature h2{margin:1px 0 3px;color:#f1effa;font-size:11.5px;line-height:1.35}
-    .feature p{margin:0;color:#a5adbd;font-size:10px;line-height:1.45}
-    .login-area{margin-top:auto}
-    .google{width:100%;min-height:49px;display:flex;align-items:center;justify-content:center;gap:11px;border:1px solid #ffffff33;border-radius:14px;padding:13px 16px;background:linear-gradient(100deg,#fbfbff,#e9edff);color:#171a27;font:750 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 24px #0003;transition:transform .16s ease,box-shadow .16s ease}
-    .google:hover{transform:translateY(-1px);box-shadow:0 12px 30px #0005}.google:disabled{opacity:.62;cursor:wait}.g-mark{font:bold 19px Arial;color:#4285f4}
-    .install-app{width:100%;min-height:42px;margin-top:9px;border:1px solid #ffffff2a;border-radius:12px;padding:10px 14px;background:#ffffff0a;color:#e8e2ff;font:700 12px system-ui,sans-serif;cursor:pointer}.install-app:hover{background:#ffffff14}.install-status{min-height:16px;margin:7px 0 0;color:#b8c0cf;font-size:10px;line-height:1.45;text-align:center}
-    .status{min-height:18px;margin:10px 0 0;color:#acb3c2;font-size:10px;line-height:1.5;text-align:center}.status.error{color:#ff9da9}
+      .feature h2{margin:1px 0 3px;color:#f1effa;font-size:11.5px;line-height:1.35}
+      .feature p{margin:0;color:#a5adbd;font-size:10px;line-height:1.45}
+      .login-area{margin-top:auto}
+      .google-button{width:100%;min-height:49px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:14px;transition:opacity .16s ease}
+      .google-button[aria-busy="true"]{opacity:.62;pointer-events:none}
+      .install-app{width:100%;min-height:42px;margin-top:9px;border:1px solid #ffffff2a;border-radius:12px;padding:10px 14px;background:#ffffff0a;color:#e8e2ff;font:700 12px system-ui,sans-serif;cursor:pointer}.install-app:hover{background:#ffffff14}.install-status{min-height:16px;margin:7px 0 0;color:#b8c0cf;font-size:10px;line-height:1.45;text-align:center}
+      .status{min-height:18px;margin:10px 0 0;color:#acb3c2;font-size:10px;line-height:1.5;text-align:center}.status.error{color:#ff9da9}
     .visual-panel{position:relative;isolation:isolate;min-width:0;min-height:660px;background:#1b1e2c}
     .visual-panel::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,#0a0e1820 0%,transparent 37%,#0b0e19a6 100%),linear-gradient(90deg,#12152122,transparent 35%)}
     .visual-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 46%;}
@@ -93,7 +94,7 @@
         <article class="feature"><span class="feature-icon" aria-hidden="true">↺</span><div><h2>Riwayat per akun</h2><p>Temukan teks dan proses lagi, hapus kapan saja.</p></div></article>
       </section>
       <div class="login-area">
-        <button id="googleSignIn" class="google" type="button"><span class="g-mark" aria-hidden="true">G</span><span>Masuk dengan Google</span></button>
+        <div id="googleSignInButton" class="google-button" role="group" aria-label="Masuk dengan Google"></div>
         <button id="installApp" class="install-app" type="button">Instal VideoTeks</button>
         <p id="installStatus" class="install-status" role="status" aria-live="polite"></p>
         <p id="loginStatus" class="status" role="status" aria-live="polite">Semua alat kreatifmu dalam satu studio.</p>
