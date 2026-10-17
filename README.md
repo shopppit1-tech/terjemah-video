@@ -35,13 +35,13 @@ API key hanya dibaca server dari `.env`; jangan commit file `.env`. Untuk halama
 
 ### Koneksi YouTube otomatis
 
-Buat OAuth 2.0 Client ID bertipe **Web application** di Google Cloud Console untuk proyek yang mengaktifkan **YouTube Data API v3**. Untuk situs GitHub Pages yang dipakai sekarang, tambahkan `https://shopppit1-tech.github.io` ke **Authorized JavaScript origins** (tanpa path). Untuk pengujian lokal, tambahkan `http://localhost:3000` dan `http://127.0.0.1:3000`. Kode memakai GIS popup, jadi **Authorized redirect URIs** boleh dikosongkan. Jangan daftarkan origin API Render kecuali halaman web VideoTeks memang dibuka langsung dari origin itu.
+Buat OAuth 2.0 Client ID bertipe **Web application** di Google Cloud Console untuk proyek yang mengaktifkan **YouTube Data API v3**. Untuk situs GitHub Pages yang dipakai sekarang, tambahkan `https://shopppit1-tech.github.io` ke **Authorized JavaScript origins** (tanpa path). Untuk pengujian lokal, tambahkan `http://localhost:3000` dan `http://127.0.0.1:3000`. Kode memakai GIS popup; saat server menukar kode otorisasi, `redirect_uri` harus sama persis dengan origin frontend (skema, host, dan port saja, tanpa path). **Authorized redirect URIs** boleh dikosongkan. Jangan daftarkan origin API Render kecuali halaman web VideoTeks memang dibuka langsung dari origin itu.
 
 Di **Data Access**, daftarkan scope `https://www.googleapis.com/auth/youtube.upload`. Di **Audience**, pilih **External** bila pengguna memakai akun Google umum; selama status **Testing**, tambahkan email penguji pada **Test users**. Catatan: refresh token untuk aplikasi External yang masih Testing berakhir setelah 7 hari. Agar koneksi dapat bertahan lebih lama, ubah status publikasi ke **Production** dan selesaikan verifikasi Google jika diminta. Di **Branding → Authorized domains**, cukup simpan `shopppit1-tech.github.io` satu kali; domain ini tanpa skema atau path.
 
 Gunakan pasangan Client ID dan Client Secret dari OAuth Web Client yang sama.
 
-Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`, serta `YOUTUBE_REDIRECT_URI=https://shopppit1-tech.github.io/videoteks/` pada server. Nilai redirect URI harus sama persis dengan URI pada OAuth Web Client. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
+Atur `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`, serta `YOUTUBE_REDIRECT_URI=https://shopppit1-tech.github.io` pada server. Nilainya harus sama persis dengan origin frontend yang membuka halaman (bukan URL halaman dengan path). Untuk pengujian lokal, set nilainya ke origin lokal yang sedang dipakai, misalnya `http://localhost:3000`. Buat kunci enkripsi 32-byte dengan `openssl rand -hex 32`; jangan commit atau membagikannya. Server menyimpan refresh token terenkripsi di Firestore per UID VideoTeks, sementara token akses hanya dipakai sementara. Pengguna menyetujui izin unggah YouTube satu kali; koneksi bisa dilepas dari halaman YouTube.
 
 Di halaman **Subtitle Video**, pilih bahasa tujuan dan tekan **Terjemahkan** untuk memakai endpoint penerjemahan yang sudah ada. Setelah ekspor MP4 berhasil, tekan **Lanjutkan video ke YouTube**; MP4 dan teks subtitle disimpan sementara di IndexedDB pada browser yang sama, lalu dimuat otomatis pada halaman upload. Video tetap dapat diunduh seperti biasa.
 
@@ -66,7 +66,7 @@ Metadata SEO YouTube memakai Gemini khusus yang terpisah dari `GEMINI_API_KEY` d
    - `YOUTUBE_CLIENT_ID`: OAuth Web Client ID Google
    - `YOUTUBE_CLIENT_SECRET`: Client Secret untuk OAuth Web Client yang sama
    - `YOUTUBE_TOKEN_ENCRYPTION_KEY`: kunci acak 64 karakter heksadesimal dari `openssl rand -hex 32`
-   - `YOUTUBE_REDIRECT_URI`: `https://shopppit1-tech.github.io/videoteks/`
+   - `YOUTUBE_REDIRECT_URI`: `https://shopppit1-tech.github.io` (origin saja, tanpa path atau slash di akhir)
    - `GEMINI_YOUTUBE_API_KEY`: API key Gemini khusus judul dan deskripsi YouTube
    - `GEMINI_YOUTUBE_MODEL`: `gemini-3.8-flash`
 5. Di Firebase Authentication, aktifkan Google Sign-In dan tambahkan domain Render pada Authorized domains. Buat Firestore Database.

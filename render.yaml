@@ -20,7 +20,7 @@ services:
       - key: YOUTUBE_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: YOUTUBE_REDIRECT_URI
-        value: https://shopppit1-tech.github.io/videoteks/
+        value: https://shopppit1-tech.github.io
       - key: GEMINI_YOUTUBE_API_KEY
         sync: false
       - key: GEMINI_YOUTUBE_MODEL

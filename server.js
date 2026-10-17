@@ -15,7 +15,7 @@ const exec = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const FIREBASE_PROJECT_ID = 'videoteks-a82c1';
-const YOUTUBE_REDIRECT_URI = process.env.YOUTUBE_REDIRECT_URI || 'https://shopppit1-tech.github.io/videoteks/';
+const YOUTUBE_REDIRECT_URI = process.env.YOUTUBE_REDIRECT_URI || 'https://shopppit1-tech.github.io';
 let firebaseAdminAuth = null;
 let firebaseDb = null;
 try {
@@ -715,8 +715,8 @@ app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
   if (!origin || !allowedOrigins.has(origin) || req.get('X-Requested-With') !== 'XmlHttpRequest') {
     return res.status(403).json({ error: 'Permintaan OAuth YouTube tidak valid.' });
   }
-  if (YOUTUBE_REDIRECT_URI !== 'https://shopppit1-tech.github.io/videoteks/' && !YOUTUBE_REDIRECT_URI.startsWith(`${origin}/`)) {
-    return res.status(500).json({ error: 'YOUTUBE_REDIRECT_URI tidak sesuai dengan domain aplikasi.' });
+  if (YOUTUBE_REDIRECT_URI !== origin) {
+    return res.status(500).json({ error: 'YOUTUBE_REDIRECT_URI harus sama persis dengan origin aplikasi yang meminta OAuth.' });
   }
   const code = typeof req.body?.code === 'string' ? req.body.code : '';
   if (!code || code.length > 4096) return res.status(400).json({ error: 'Kode otorisasi YouTube tidak valid.' });
@@ -749,7 +749,11 @@ app.post('/api/youtube/connect', requireFirebaseUser, async (req, res) => {
     }, { merge: true });
     res.json({ connected: true, accessToken: tokens.access_token });
   } catch (error) {
-    console.error('[youtube] gagal menyambungkan akun:', error.oauthError || error.message);
+    const oauthError = error.oauthError;
+    console.error('[youtube] gagal menyambungkan akun:', oauthError || error.message);
+    if (oauthError === 'invalid_client') {
+      return res.status(502).json({ error: 'Kredensial OAuth Google tidak valid. Periksa YOUTUBE_CLIENT_ID dan YOUTUBE_CLIENT_SECRET dari OAuth Web Client yang sama di Render.' });
+    }
     res.status(502).json({ error: 'Akun YouTube gagal disambungkan. Coba ulangi persetujuan akun.' });
   }
 });
