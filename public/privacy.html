@@ -31,15 +31,15 @@
         <h2>1. Tentang kebijakan ini</h2>
         <p>Kebijakan ini menjelaskan bagaimana VideoTeks mengakses, menggunakan, menyimpan, dan membagikan data saat Anda menggunakan situs/aplikasi VideoTeks untuk membuat subtitle, menerjemahkan teks, mengganti audio, atau membuat suara narasi.</p>
         <p>Pengembang/pengelola: <strong>VideoTeks (shopppit1-tech)</strong>. Kontak privasi: <a href="mailto:terjemahvideo@gmail.com">terjemahvideo@gmail.com</a>.</p>
-        <p>Dengan masuk menggunakan Google dan memilih fitur pemrosesan, Anda meminta VideoTeks menjalankan fitur tersebut dan mengirim data yang diperlukan kepada penyedia layanan yang dijelaskan di bawah.</p>
+        <p>Dengan masuk dan memilih fitur pemrosesan, Anda meminta VideoTeks menjalankan fitur tersebut dan mengirim data yang diperlukan kepada penyedia layanan yang dijelaskan di bawah.</p>
       </section>
 
       <section class="section">
         <h2>2. Data yang diproses</h2>
         <ul>
-          <li><strong>Informasi akun:</strong> Firebase UID dan informasi profil Google yang tersedia bagi layanan autentikasi, seperti alamat email, nama, dan foto profil. VideoTeks menampilkan email akun dan memakai UID untuk memisahkan data setiap akun.</li>
+          <li><strong>Informasi akun:</strong> ID akun dan informasi profil yang diberikan kepada penyedia autentikasi, seperti alamat email, nama, dan foto profil. VideoTeks menampilkan email akun dan memakai UID untuk memisahkan data setiap akun.</li>
           <li><strong>Konten yang Anda berikan:</strong> file video/audio yang dipilih untuk diproses, nama file, teks narasi, teks hasil pengenalan ucapan, segmen subtitle dan waktunya, teks sumber/terjemahan, bahasa tujuan, pilihan suara/gaya bicara, serta pengaturan tampilan dan proses.</li>
-          <li><strong>Riwayat aktivitas:</strong> bergantung pada fitur, riwayat dapat mencakup nama file dan durasi, teks/segmen transkripsi, teks sumber dan terjemahan, pengaturan subtitle, atau teks, karakter suara, dan gaya narasi. Riwayat disimpan pada akun Firebase Anda.</li>
+          <li><strong>Riwayat aktivitas:</strong> bergantung pada fitur, riwayat dapat mencakup nama file dan durasi, teks/segmen transkripsi, teks sumber dan terjemahan, pengaturan subtitle, atau teks, karakter suara, dan gaya narasi. Riwayat disimpan pada akun VideoTeks Anda.</li>
           <li><strong>Data teknis:</strong> waktu permintaan, ukuran berkas, informasi kinerja dan kesalahan, serta data koneksi yang diproses penyedia hosting untuk menjalankan dan mengamankan layanan. Penyedia dapat menerima alamat IP, jenis browser/perangkat, dan metadata permintaan.</li>
         </ul>
         <p>Jangan unggah konten yang tidak berhak Anda gunakan atau informasi sensitif yang tidak diperlukan untuk membuat hasil yang Anda inginkan.</p>
@@ -54,25 +54,25 @@
       <section class="section">
         <h2>4. Penyimpanan, pemrosesan, dan pihak lain</h2>
         <ul>
-          <li><strong>Google Sign-In, Firebase Authentication, dan Cloud Firestore:</strong> digunakan untuk masuk, mengesahkan permintaan, serta menyimpan riwayat secara terpisah berdasarkan UID akun.</li>
-          <li><strong>Layanan AI Google:</strong> teks atau audio yang diperlukan dikirim untuk menghasilkan transkripsi, terjemahan, atau narasi. Untuk transkripsi, VideoTeks mengambil audio dari video; yang dikirim ke layanan AI adalah audio hasil ekstraksi, bukan berkas video utuh. Teks terjemahan dan teks narasi juga dikirim saat Anda meminta fitur tersebut.</li>
-          <li><strong>Render:</strong> menjalankan backend untuk memproses berkas dan permintaan. Berkas unggahan disimpan sementara di server selama pemrosesan dan aplikasi berusaha menghapusnya setelah proses selesai atau gagal.</li>
-          <li><strong>GitHub Pages:</strong> menyajikan halaman web statis VideoTeks.</li>
+          <li><strong>Penyedia autentikasi dan basis data cloud:</strong> digunakan untuk masuk, mengesahkan permintaan, serta menyimpan riwayat secara terpisah berdasarkan UID akun.</li>
+          <li><strong>Layanan pemrosesan AI eksternal:</strong> teks atau audio yang diperlukan dikirim untuk menghasilkan transkripsi, terjemahan, atau narasi. Untuk transkripsi, VideoTeks mengambil audio dari video; yang dikirim ke layanan AI adalah audio hasil ekstraksi, bukan berkas video utuh. Teks terjemahan dan teks narasi juga dikirim saat Anda meminta fitur tersebut.</li>
+          <li><strong>Penyedia server backend:</strong> menjalankan layanan untuk memproses berkas dan permintaan. Berkas unggahan disimpan sementara di server selama pemrosesan dan aplikasi berusaha menghapusnya setelah proses selesai atau gagal.</li>
+          <li><strong>Penyedia hosting web:</strong> menyajikan halaman web statis VideoTeks.</li>
         </ul>
-        <p>Untuk berkas audio transkripsi berukuran besar, backend dapat menggunakan layanan penyimpanan berkas sementara milik Google. Google menyatakan berkas tersebut disimpan sampai dihapus atau kedaluwarsa. Versi VideoTeks saat ini tidak mengirim perintah penghapusan otomatis untuk berkas tersebut; masa simpan dan penanganannya mengikuti ketentuan Google yang berlaku. Layanan AI Google juga dapat memproses teks masukan dan hasil sesuai jenis layanan serta ketentuan yang berlaku untuk akun pengembang.</p>
-        <p>Video dan audio sumber tidak disimpan sebagai berkas riwayat di Firestore. Hasil yang diunduh tetap berada di perangkat Anda. Untuk meneruskan audio/video di antara fitur, aplikasi dapat menyimpan berkas hasil sementara di IndexedDB pada browser perangkat sampai ditimpa atau data situs dihapus. Sesi masuk Google disimpan secara lokal oleh browser sampai Anda keluar atau menghapus data situs.</p>
+        <p>Untuk berkas audio transkripsi berukuran besar, backend dapat menggunakan layanan penyimpanan berkas sementara milik penyedia AI. Penyedia tersebut menyatakan berkasnya disimpan sampai dihapus atau kedaluwarsa. Versi VideoTeks saat ini tidak mengirim perintah penghapusan otomatis untuk berkas tersebut; masa simpan dan penanganannya mengikuti ketentuan penyedia yang berlaku. Layanan pemrosesan AI eksternal juga dapat memproses teks masukan dan hasil sesuai jenis layanan serta ketentuan yang berlaku untuk akun pengembang.</p>
+        <p>Video dan audio sumber tidak disimpan sebagai berkas riwayat di Firestore. Hasil yang diunduh tetap berada di perangkat Anda. Untuk meneruskan audio/video di antara fitur, aplikasi dapat menyimpan berkas hasil sementara di IndexedDB pada browser perangkat sampai ditimpa atau data situs dihapus. Sesi masuk disimpan secara lokal oleh browser sampai Anda keluar atau menghapus data situs.</p>
       </section>
 
       <section class="section">
         <h2>5. Retensi dan penghapusan data</h2>
         <p>Riwayat Firestore disimpan sampai Anda menghapus item melalui halaman <a href="history.html">Riwayat</a> atau meminta penghapusan akun. Aplikasi menampilkan hingga 100 item terbaru; batas tampilan tersebut bukan batas masa simpan. Berkas unggahan sementara, salinan di layanan AI, data browser, dan log penyedia memiliki ketentuan retensi masing-masing sebagaimana dijelaskan di atas atau dalam kebijakan penyedia.</p>
-        <p>Untuk meminta penghapusan akun dan data terkait, gunakan halaman <a href="delete-account.html">Hapus Akun VideoTeks</a> atau kirim email ke <a href="mailto:terjemahvideo@gmail.com?subject=Permintaan%20penghapusan%20akun%20VideoTeks">terjemahvideo@gmail.com</a> dari alamat Google yang digunakan untuk masuk. Kami akan memverifikasi permintaan, lalu menghapus akun VideoTeks dan riwayat terkait dari sistem yang kami kendalikan. Salinan cadangan, log keamanan, atau data yang berada di infrastruktur penyedia dapat tetap tersimpan untuk waktu terbatas sesuai kebijakan mereka atau kewajiban hukum.</p>
+        <p>Untuk meminta penghapusan akun dan data terkait, gunakan halaman <a href="delete-account.html">Hapus Akun VideoTeks</a> atau kirim email ke <a href="mailto:terjemahvideo@gmail.com?subject=Permintaan%20penghapusan%20akun%20VideoTeks">terjemahvideo@gmail.com</a> dari alamat email yang digunakan untuk masuk. Kami akan memverifikasi permintaan, lalu menghapus akun VideoTeks dan riwayat terkait dari sistem yang kami kendalikan. Salinan cadangan, log keamanan, atau data yang berada di infrastruktur penyedia dapat tetap tersimpan untuk waktu terbatas sesuai kebijakan mereka atau kewajiban hukum.</p>
         <p>Untuk menghapus berkas hasil yang tersimpan lokal, hapus data situs VideoTeks dari pengaturan browser/perangkat. Penghapusan lokal tidak menghapus riwayat Firestore, dan sebaliknya.</p>
       </section>
 
       <section class="section">
         <h2>6. Keamanan dan anak-anak</h2>
-        <p>Komunikasi situs dan backend menggunakan HTTPS. Permintaan fitur memerlukan sesi Firebase yang diverifikasi server, dan riwayat dibatasi ke UID akun yang masuk. Tidak ada metode transmisi atau penyimpanan yang dapat dijamin aman sepenuhnya.</p>
+        <p>Komunikasi situs dan backend menggunakan HTTPS. Permintaan fitur memerlukan sesi akun yang diverifikasi server, dan riwayat dibatasi ke UID akun yang masuk. Tidak ada metode transmisi atau penyimpanan yang dapat dijamin aman sepenuhnya.</p>
         <p>VideoTeks adalah alat kreatif umum dan tidak dirancang khusus untuk anak-anak. Jika Anda yakin seorang anak memberikan data pribadi tanpa izin yang sesuai, hubungi kami agar dapat ditinjau.</p>
       </section>
 
@@ -88,15 +88,15 @@
         <h2>1. About this policy</h2>
         <p>This policy explains how VideoTeks accesses, uses, stores, and shares data when you use the VideoTeks website/app to create subtitles, translate text, replace audio, or generate narration.</p>
         <p>Developer/operator: <strong>VideoTeks (shopppit1-tech)</strong>. Privacy contact: <a href="mailto:terjemahvideo@gmail.com">terjemahvideo@gmail.com</a>.</p>
-        <p>When you sign in with Google and choose a processing feature, you ask VideoTeks to perform that feature and send the necessary data to the service providers described below.</p>
+        <p>When you sign in and choose a processing feature, you ask VideoTeks to perform that feature and send the necessary data to the service providers described below.</p>
       </section>
 
       <section class="section">
         <h2>2. Data processed</h2>
         <ul>
-          <li><strong>Account information:</strong> Firebase UID and Google profile information made available to the authentication service, such as email address, name, and profile photo. VideoTeks displays the account email and uses the UID to separate each account's data.</li>
+          <li><strong>Account information:</strong> Account ID and profile information made available to the authentication provider, such as email address, name, and profile photo. VideoTeks displays the account email and uses the UID to separate each account's data.</li>
           <li><strong>Content you provide:</strong> video/audio files selected for processing, file names, narration text, recognized speech, subtitle segments and timestamps, source/translated text, target language, voice/style choices, and display or processing settings.</li>
-          <li><strong>Activity history:</strong> depending on the feature, history may include file names and durations, transcription text/segments, source and translated text, subtitle settings, or narration text, voice, and style. History is stored under your Firebase account.</li>
+          <li><strong>Activity history:</strong> depending on the feature, history may include file names and durations, transcription text/segments, source and translated text, subtitle settings, or narration text, voice, and style. History is stored under your VideoTeks account.</li>
           <li><strong>Technical data:</strong> request times, file sizes, performance and error information, and connection data processed by hosting providers to operate and secure the service. Providers may receive IP address, browser/device type, and request metadata.</li>
         </ul>
         <p>Do not upload content you are not authorized to use or sensitive information that is unnecessary for the result you want.</p>
@@ -111,26 +111,26 @@
       <section class="section">
         <h2>4. Storage, processing, and third parties</h2>
         <ul>
-          <li><strong>Google Sign-In, Firebase Authentication, and Cloud Firestore:</strong> used for sign-in, request authentication, and account-separated history storage by UID.</li>
-          <li><strong>Google AI services:</strong> necessary text or audio is sent to generate transcription, translation, or narration. For transcription, VideoTeks extracts audio from your video; the extracted audio, not the full video file, is sent to the AI service. Translation text and narration text are also sent when you request those features.</li>
-          <li><strong>Render:</strong> operates the backend that processes files and requests. Uploaded files are held temporarily on the server during processing, and the app attempts to delete them when processing succeeds or fails.</li>
-          <li><strong>GitHub Pages:</strong> serves the static VideoTeks website.</li>
+          <li><strong>Authentication and cloud database providers:</strong> used for sign-in, request authentication, and account-separated history storage by UID.</li>
+          <li><strong>External AI processing services:</strong> necessary text or audio is sent to generate transcription, translation, or narration. For transcription, VideoTeks extracts audio from your video; the extracted audio, not the full video file, is sent to the AI service. Translation text and narration text are also sent when you request those features.</li>
+          <li><strong>Backend hosting provider:</strong> operates the service that processes files and requests. Uploaded files are held temporarily on the server during processing, and the app attempts to delete them when processing succeeds or fails.</li>
+          <li><strong>Website hosting provider:</strong> serves the static VideoTeks website.</li>
         </ul>
-        <p>For larger transcription audio files, the backend may use Google's temporary file-storage service. Google says those files are stored until deleted or expired. The current version of VideoTeks does not send an automatic deletion request for those files; their retention and handling are governed by Google's applicable terms. Google AI services may also process input text and results according to the service type and terms applicable to the developer account.</p>
-        <p>Source video and audio are not stored as Firestore history files. Downloaded results remain on your device. To hand off audio/video between features, the app may temporarily store generated files in browser IndexedDB until they are replaced or site data is cleared. Your Google sign-in session is stored locally by the browser until you sign out or clear site data.</p>
+        <p>For larger transcription audio files, the backend may use the AI provider's temporary file-storage service. The provider says those files are stored until deleted or expired. The current version of VideoTeks does not send an automatic deletion request for those files; their retention and handling are governed by the provider's applicable terms. External AI services may also process input text and results according to the service type and terms applicable to the developer account.</p>
+        <p>Source video and audio are not stored as Firestore history files. Downloaded results remain on your device. To hand off audio/video between features, the app may temporarily store generated files in browser IndexedDB until they are replaced or site data is cleared. Your sign-in session is stored locally by the browser until you sign out or clear site data.</p>
       </section>
 
       <section id="delete-account" class="section">
         <h2>5. Retention and deletion</h2>
         <p>Firestore history remains until you delete an item in the <a href="history.html">History</a> page or request account deletion. The app displays up to the 100 most recent items; this display limit is not a retention limit. Temporary uploads, copies handled by AI services, browser data, and provider logs have their own retention terms as described above or in the providers' policies.</p>
-        <p>To request deletion of your account and associated data, use the <a href="delete-account.html">Delete VideoTeks Account</a> page or email <a href="mailto:terjemahvideo@gmail.com?subject=VideoTeks%20account%20deletion%20request">terjemahvideo@gmail.com</a> from the Google address you used to sign in. We will verify the request and then delete the VideoTeks account and related history from systems we control. Backups, security logs, or data held in provider infrastructure may remain for a limited period under their policies or applicable legal obligations.</p>
+        <p>To request deletion of your account and associated data, use the <a href="delete-account.html">Delete VideoTeks Account</a> page or email <a href="mailto:terjemahvideo@gmail.com?subject=VideoTeks%20account%20deletion%20request">terjemahvideo@gmail.com</a> from the email address you used to sign in. We will verify the request and then delete the VideoTeks account and related history from systems we control. Backups, security logs, or data held in provider infrastructure may remain for a limited period under their policies or applicable legal obligations.</p>
         <p>To remove locally stored output files, clear VideoTeks site data in your browser/device settings. Local deletion does not delete Firestore history, and vice versa.</p>
         <a class="contact" href="delete-account.html">Request account deletion</a>
       </section>
 
       <section class="section">
         <h2>6. Security and children</h2>
-        <p>Website and backend communications use HTTPS. Feature requests require a Firebase session verified by the server, and history access is scoped to the signed-in account UID. No method of transmission or storage can be guaranteed completely secure.</p>
+        <p>Website and backend communications use HTTPS. Feature requests require an authenticated account session verified by the server, and history access is scoped to the signed-in account UID. No method of transmission or storage can be guaranteed completely secure.</p>
         <p>VideoTeks is a general creative tool and is not specifically designed for children. If you believe a child provided personal data without appropriate permission, contact us so we can review it.</p>
       </section>
 

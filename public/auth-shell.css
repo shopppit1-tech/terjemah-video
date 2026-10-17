@@ -34,3 +34,4 @@
 .history-error{color:#fda4af}
 
 .privacy-footer{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:7px;width:min(100%,640px);margin:0 auto;padding:12px 14px 18px;color:#aeb8c6;font:11px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center}.privacy-footer a{color:#bca7ff;text-decoration:underline;text-underline-offset:3px}.privacy-footer a:hover{color:#d7caff}
+.auth-bar .profile-menu a{display:block;width:100%;margin:6px 0 0;padding:9px 10px;border-color:#ffffff20;border-radius:9px;background:#18222c;color:#f7f8fb;text-align:left;font-size:12px;text-decoration:none}.auth-bar .profile-menu a:hover{border-color:#9c5eff}
